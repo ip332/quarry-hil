@@ -29,7 +29,9 @@ import subprocess
 import sys
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Import serial_link from infrastructure/core (two levels up from this file)
+_hil_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(_hil_root, "infrastructure", "core"))
 from serial_link import SerialLink, SerialTimeout, resolve_segger_jlink_device  # noqa: E402
 
 SEGGER_SERIAL_NUMBER = "000900003460"
