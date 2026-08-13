@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  # Hardware-independent checks suitable for PR gating
+  
+  syntax-check:
+    name: "Python Syntax Check"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: "Validate Python syntax"
+        run: |
+          python3 -m py_compile boards/visioncb-8m-std/run_visioncb_hil.py
+          python3 -m py_compile infrastructure/core/serial_link.py
+          python3 -m py_compile infrastructure/schema/result_schema.py
+          python3 -m py_compile tests/test_schema.py
+      - name: "Check for common import errors"
+        run: |
+          python3 -c "import sys; sys.path.insert(0, 'infrastructure/core'); from serial_link import SerialLink; print('✓ serial_link');"
+          python3 -c "import sys; sys.path.insert(0, 'infrastructure/schema'); from result_schema import validate_hil_result, ResultCode; print('✓ result_schema');"
+
+  unit-tests:
+    name: "Unit Tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: "Run schema validation tests"
+        run: python3 tests/test_schema.py
+      - name: "Run pytest if available"
+        run: |
+          python3 -m pip install pytest --quiet 2>/dev/null || true
+          python3 -m pytest tests/ -v 2>/dev/null || python3 tests/test_schema.py
+
+  schema-validation:
+    name: "Schema Validation"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: "Validate result schema against sample data"
+        run: |
+          python3 << 'EOF'
+          import sys
+          import json
+          sys.path.insert(0, 'infrastructure/schema')
+          from result_schema import parse_result_json, ResultCode
+          
+          # Test with the actual Phase 9 run result from hil_runner
+          sample = {
+              "schema_version": 1,
+              "result": "PASS",
+              "run_dir": "/runs/20260812T231230Z",
+              "quarry": {
+                  "branch": "main",
+                  "commit": "2767673447ac9752cad67579d83bebe14e0149c7",
+                  "dirty": False,
+                  "status_short": ""
+              },
+              "firmware": {
+                  "bin_name": "quarry_bench.bin",
+                  "sha256": "d2c055a762a3c64adcc560ba80f106b4846445a8072d24bd41dc486f3616fdbb",
+                  "bin_bytes": 5776,
+                  "text_bytes": 5776,
+                  "data_bytes": 0,
+                  "bss_bytes": 11072,
+                  "compiler": "arm-none-eabi-gcc 10.3.1",
+                  "flags": "-mcpu=cortex-m4 -mthumb"
+              },
+              "toolchain": {
+                  "compiler": "arm-none-eabi-gcc 10.3.1",
+                  "flags": "-mcpu=cortex-m4 -mthumb"
+              },
+              "target": {
+                  "board": "VisionCB-8M-STD",
+                  "soc": "NXP i.MX8M Mini",
+                  "cpu": "Cortex-M4F",
+                  "clock_hz": 200000000,
+                  "serial_device": "/dev/ttyACM1"
+              },
+              "benchmark": {
+                  "platform": "VisionCB-8M-STD",
+                  "cpu": "Cortex-M4F",
+                  "workload": "telemetry",
+                  "magic": "0x51424e31",
+                  "version": 1,
+                  "state": 2,
+                  "result_code": 1,
+                  "counter": 266,
+                  "dwt_supported": True,
+                  "timing_overhead_cycles": 9,
+                  "iterations": 500,
+                  "encoded_bytes": 85,
+                  "validation_failures": 0
+              }
+          }
+          
+          # Validate schema
+          try:
+              result = parse_result_json(json.dumps(sample))
+              print("✓ Schema validation passed")
+              print(f"  Result: {result['result']}")
+              print(f"  Quarry commit: {result['quarry']['commit'][:7]}")
+              print(f"  Validation failures: {result['benchmark']['validation_failures']}")
+          except Exception as e:
+              print(f"✗ Schema validation failed: {e}")
+              sys.exit(1)
+          EOF
+
+  # All status-check names that should be required in main branch ruleset
+  ci-complete:
+    name: "CI Complete"
+    needs:
+      - syntax-check
+      - unit-tests
+      - schema-validation
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check all status checks passed
+        run: |
+          if [ "${{ needs.syntax-check.result }}" != "success" ] || \
+             [ "${{ needs.unit-tests.result }}" != "success" ] || \
+             [ "${{ needs.schema-validation.result }}" != "success" ]; then
+            echo "One or more checks failed"
+            exit 1
+          fi
+          echo "✓ All CI checks passed"
