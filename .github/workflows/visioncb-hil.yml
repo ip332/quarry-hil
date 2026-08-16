@@ -1,0 +1,150 @@
+name: VisionCB HIL
+
+# Physical hardware-in-the-loop validation against a real VisionCB-8M-STD
+# board (NXP i.MX8M Mini Cortex-M4F). Thin orchestration wrapper only --
+# all hardware state-machine logic lives in run_visioncb_hil.py and its
+# supporting modules, not here.
+#
+# Deliberately NEVER triggers on pull_request: this workflow requires the
+# dedicated, repo-scoped self-hosted VisionCB runner, and physical HIL must
+# never become a required (or even optional) gate on ordinary PR code from
+# untrusted branches/forks. Ordinary PR CI stays on GitHub-hosted runners
+# via ci.yml, unchanged by this file.
+#
+# Triggers:
+#   - workflow_dispatch: manual runs, and the release/RC validation
+#     mechanism (dispatch with `quarry_ref` set to the release tag/SHA).
+#   - schedule: nightly run against current Quarry main. Cron is always
+#     interpreted in UTC by GitHub Actions, never local time.
+#
+# The requested Quarry ref is resolved in a dedicated CI-only local clone
+# (/home/igor/.cache/visioncb-hil/quarry-ci-checkout on the runner host) --
+# never the developer's own interactive checkout at /home/igor/work/quarry --
+# so a nightly/scheduled run can never switch out a human's working branch
+# from under them.
+
+on:
+  workflow_dispatch:
+    inputs:
+      quarry_ref:
+        description: "Quarry branch, tag, or commit SHA to validate (release/RC validation: pass the release tag)"
+        required: false
+        default: main
+  schedule:
+    # 03:17 UTC nightly -- low-contention offset-minute slot, avoids the
+    # top-of-hour cron pileup on GitHub's shared scheduler.
+    - cron: "17 3 * * *"
+
+# Exactly one physical VisionCB hardware session at a time. A second run
+# (e.g. a nightly firing while a manual run is still in progress) queues
+# behind the active one rather than cancelling it -- cancel-in-progress is
+# deliberately false so an in-progress hardware session is never interrupted
+# mid-sequence.
+concurrency:
+  group: visioncb-hil-hardware
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  QUARRY_CI_CHECKOUT: /home/igor/.cache/visioncb-hil/quarry-ci-checkout
+  QUARRY_HARNESS_DIR: /home/igor/work/visioncb-m4/quarry_bench
+
+jobs:
+  hil:
+    name: Physical VisionCB Cortex-M4F HIL run
+    runs-on: [self-hosted, linux, x64, visioncb, cortex-m4]
+    # Generous but bounded: a healthy run completes in ~1-2 minutes; this
+    # leaves headroom for slow boot/retry without risking an indefinitely
+    # hung job. The runner script itself never retries a hung board --
+    # RECOVERY_REQUIRED exits promptly on an unresponsive console.
+    timeout-minutes: 20
+    steps:
+      - name: Checkout quarry-hil
+        uses: actions/checkout@v4
+
+      - name: Resolve requested Quarry ref
+        id: resolve
+        run: |
+          set -euo pipefail
+          REF="${{ inputs.quarry_ref || 'main' }}"
+          git -C "$QUARRY_CI_CHECKOUT" fetch origin --tags --prune --force
+          if git -C "$QUARRY_CI_CHECKOUT" rev-parse --verify "origin/$REF" >/dev/null 2>&1; then
+            git -C "$QUARRY_CI_CHECKOUT" checkout --detach "origin/$REF"
+          else
+            git -C "$QUARRY_CI_CHECKOUT" checkout --detach "$REF"
+          fi
+          RESOLVED=$(git -C "$QUARRY_CI_CHECKOUT" rev-parse HEAD)
+          echo "requested_ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "resolved_sha=$RESOLVED" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Quarry ref resolved"
+            echo "Requested: \`$REF\`"
+            echo "Resolved commit: \`$RESOLVED\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run VisionCB HIL
+        id: hil
+        run: |
+          set +e
+          python3 boards/visioncb-8m-std/run_visioncb_hil.py \
+            --quarry-dir "$QUARRY_CI_CHECKOUT" \
+            --harness-dir "$QUARRY_HARNESS_DIR"
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Locate run directory
+        id: rundir
+        if: always()
+        run: |
+          set -euo pipefail
+          LATEST=$(ls -td boards/visioncb-8m-std/runs/*/ | head -1)
+          echo "run_dir=$LATEST" >> "$GITHUB_OUTPUT"
+
+      - name: Summarize result
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 - "${{ steps.rundir.outputs.run_dir }}result.json" >> "$GITHUB_STEP_SUMMARY" << 'EOF'
+          import json, sys
+          d = json.load(open(sys.argv[1]))
+          print(f"### VisionCB HIL result: {d.get('result')}")
+          q = d.get("quarry", {})
+          print(f"Quarry: branch=`{q.get('branch')}` commit=`{q.get('commit')}` dirty={q.get('dirty')}")
+          fw = d.get("firmware", {})
+          if fw:
+              print(f"Firmware: `{fw.get('bin_name')}` sha256=`{fw.get('sha256')}`")
+          b = d.get("benchmark")
+          if b:
+              print(f"Encode: {b['encode_cycles']['mean']:.0f} cycles | "
+                    f"Decode: {b['decode_cycles']['mean']:.0f} cycles | "
+                    f"Round-trip: {b['roundtrip_cycles']['mean']:.0f} cycles | "
+                    f"Payload: {b['encoded_bytes']} bytes | "
+                    f"Stack watermark: {b['stack_watermark_bytes']} bytes | "
+                    f"Validation failures: {b['validation_failures']}")
+          if "error" in d:
+              print(f"Error: {d['error']}")
+          EOF
+
+      - name: Upload HIL result artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visioncb-hil-result-${{ github.run_id }}
+          path: |
+            ${{ steps.rundir.outputs.run_dir }}result.json
+            ${{ steps.rundir.outputs.run_dir }}runner.log
+            ${{ steps.rundir.outputs.run_dir }}console.log
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Fail job on non-PASS result
+        if: always()
+        run: |
+          case "${{ steps.hil.outputs.exit_code }}" in
+            0) echo "PASS" ;;
+            1) echo "::error::VisionCB HIL: Quarry functional TEST_FAILURE (exit 1) -- see uploaded result.json"; exit 1 ;;
+            2) echo "::error::VisionCB HIL: INFRASTRUCTURE_ERROR (exit 2) -- see uploaded runner.log"; exit 1 ;;
+            3) echo "::error::VisionCB HIL: RECOVERY_REQUIRED (exit 3) -- board needs a physical power-cycle before the next run"; exit 1 ;;
+            *) echo "::error::VisionCB HIL: unexpected exit code ${{ steps.hil.outputs.exit_code }}"; exit 1 ;;
+          esac

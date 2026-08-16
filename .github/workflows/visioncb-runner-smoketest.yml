@@ -1,0 +1,39 @@
+name: VisionCB Runner Smoke Test
+
+# Harmless verification that GitHub Actions can reach the self-hosted VisionCB
+# host: dispatch delivery, label selection, repo checkout, and expected host
+# tooling. Deliberately never opens a serial device or touches the board.
+#
+# Manual dispatch only -- never runs on pull_request, never runs on a
+# schedule. Safe to run at any time, including while a VisionCB HIL job is
+# queued or running (does not share the hardware concurrency group).
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Self-hosted runner smoke test (no hardware touched)
+    runs-on: [self-hosted, linux, x64, visioncb, cortex-m4]
+    timeout-minutes: 5
+    steps:
+      - name: Checkout quarry-hil
+        uses: actions/checkout@v4
+
+      - name: Report host environment
+        run: |
+          set -euo pipefail
+          echo "### VisionCB runner smoke test" >> "$GITHUB_STEP_SUMMARY"
+          echo "Host: $(hostname)" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Python: $(python3 --version)" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Toolchain: $(arm-none-eabi-gcc --version | head -1)" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Repo checkout: $(pwd)"
+          test -f boards/visioncb-8m-std/run_visioncb_hil.py
+          echo "run_visioncb_hil.py present: OK" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "SEGGER by-id entries visible (not opened):"
+          ls /dev/serial/by-id/ 2>/dev/null || echo "(none visible -- not treated as an error by this smoke test)"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "No serial device was opened and no board state was touched by this workflow." >> "$GITHUB_STEP_SUMMARY"
