@@ -1,0 +1,32 @@
+namespace: hil.telemetry
+record: SensorSample
+version: 1
+type: data
+enums:
+  Status:
+    values:
+      ok: 0
+      warning: 1
+      fault: 2
+fields:
+  sequence:
+    type: uint32
+  timestamp_ms:
+    type: uint64
+  temperature_c:
+    type: float32
+  battery_mv:
+    type: uint16
+  calibrated:
+    type: bool
+  status:
+    type: Status
+  device_id:
+    type: string
+    max_bytes: 16
+  raw_payload:
+    type: bytes
+    max_bytes: 8
+  readings:
+    type: int16[]
+    max_elements: 4
