@@ -22,6 +22,7 @@ jobs:
       - name: "Validate Python syntax"
         run: |
           python3 -m py_compile boards/visioncb-8m-std/run_visioncb_hil.py
+          python3 -m py_compile boards/nucleo-f446re/run_nucleo_hil.py
           python3 -m py_compile infrastructure/core/serial_link.py
           python3 -m py_compile infrastructure/schema/result_schema.py
           python3 -m py_compile tests/test_schema.py
