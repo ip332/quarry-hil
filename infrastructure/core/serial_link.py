@@ -138,16 +138,16 @@ class SerialLink:
             time.sleep(cr_interval)
 
 
-def resolve_segger_jlink_device(serial_number, by_id_dir="/dev/serial/by-id"):
-    """Resolve the VisionCB console through /dev/serial/by-id, matching
-    the known SEGGER serial number rather than any ttyACM index (the
-    J-Link's ttyACM number changed at least twice across Phases 6/7/8 in
-    this same session -- by-id is the only stable identity). Fails
-    loudly and specifically on absence or ambiguity."""
+def resolve_by_id_device(needle, by_id_dir="/dev/serial/by-id"):
+    """Resolve a console device through /dev/serial/by-id, matching a
+    known needle substring (e.g. a probe's USB serial number) rather than
+    any ttyACM index -- ttyACM numbers are not stable across reboots or
+    reconnects when multiple USB-serial devices share a host (proven
+    across Phases 6/7/8 with the VisionCB J-Link). Fails loudly and
+    specifically on absence or ambiguity."""
     if not os.path.isdir(by_id_dir):
         raise RuntimeError("%s does not exist -- no serial devices present at all" % by_id_dir)
 
-    needle = "SEGGER_J-Link_%s" % serial_number
     matches = [os.path.join(by_id_dir, name) for name in os.listdir(by_id_dir) if needle in name]
 
     if len(matches) == 0:
@@ -162,3 +162,18 @@ def resolve_segger_jlink_device(serial_number, by_id_dir="/dev/serial/by-id"):
     if not os.path.exists(resolved):
         raise RuntimeError("resolved device %s does not exist" % resolved)
     return resolved
+
+
+def resolve_segger_jlink_device(serial_number, by_id_dir="/dev/serial/by-id"):
+    """Resolve the VisionCB console via its SEGGER J-Link's USB serial
+    number. See resolve_by_id_device for the underlying rationale."""
+    return resolve_by_id_device("SEGGER_J-Link_%s" % serial_number, by_id_dir)
+
+
+def resolve_stm32_stlink_device(serial_number, by_id_dir="/dev/serial/by-id"):
+    """Resolve the NUCLEO-F446RE console via its on-board ST-LINK/V2.1's
+    USB serial number. See resolve_by_id_device for the underlying
+    rationale."""
+    return resolve_by_id_device(
+        "STMicroelectronics_STM32_STLink_%s" % serial_number, by_id_dir
+    )

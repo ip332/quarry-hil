@@ -2,7 +2,7 @@ Quarry HIL provides hardware-in-the-loop validation and benchmarking infrastruct
 
 It builds Quarry-generated code for target MCUs, deploys and executes test firmware on physical hardware, collects correctness and performance results, and produces reproducible machine-readable benchmark artifacts.
 
-Initial hardware support targets the VisionCB-8M-STD / NXP i.MX8M Mini Cortex-M4F, with the infrastructure designed to support additional embedded targets over time.
+Initial hardware support targeted the VisionCB-8M-STD / NXP i.MX8M Mini Cortex-M4F; NUCLEO-F446RE / STM32F446RE was added second, with the infrastructure designed to support further embedded targets over time.
 
 ## VisionCB-8M-STD hardware
 
@@ -52,6 +52,24 @@ If the board is *already sitting mid-session* (a live Linux shell, reachable at 
 - **No SWD/JTAG/RTT**: all communication is over the SEGGER J-Link's UART passthrough only.
 - **No credentials sent to an unconfirmed system**: the console classifier verifies OS identity (banner text, or a safe read-only `cat /etc/issue`) before ever attempting login — see the eMMC/autoboot section above.
 - **No indefinite retries against a hung board**: `RECOVERY_REQUIRED` is a firm stop, not a retry loop.
+
+## NUCLEO-F446RE hardware
+
+- **Board**: NUCLEO-F446RE (STM32F446RE, Cortex-M4F, on-board ST-LINK/V2.1)
+- **Host connection**: the on-board ST-LINK/V2.1 (serial `0669FF565271525067071140`) provides both the SWD programming/reset interface (used by `st-flash`) and a UART console over USB-CDC (the board's Virtual COM Port), all through one USB cable. Device discovery always resolves through `/dev/serial/by-id/usb-STMicroelectronics_STM32_STLink_0669FF565271525067071140-if02` — never a raw `/dev/ttyACM*` index, which is not stable across boots.
+- **Unlike VisionCB-8M-STD**, this is a standalone chip with no OS, no U-Boot, no eMMC/SD, and no second CPU to hand off to: the firmware (`boards/nucleo-f446re/firmware/`, checked into this repo — unlike VisionCB's harness, which lives externally) boots directly from flash, runs the same Quarry encode/decode/round-trip workload as the VisionCB harness, and streams its result off-device as raw hex over its UART (USART2, the board's default ST-LINK VCP route) once, framed with begin/end markers. `run_nucleo_hil.py` decodes that hex and computes the same summary statistics VisionCB's on-target reader would. Only the aggregate stats (min/max/mean/sum) are transmitted, not raw per-iteration samples — see `firmware/main.c`'s `report_result()` for why (a full-struct transfer was observed to occasionally truncate on this flow-control-free UART).
+- **Clock**: deliberately left at the post-reset default (HSI, 16 MHz, no PLL) — see `firmware/uart.h` for the rationale. DWT cycle counts are reported at this clock, not the chip's 180 MHz ceiling.
+- **Flashing**: via `st-flash` (package `stlink-tools`) over SWD — `sudo apt-get install -y stlink-tools` if not already present. No OpenOCD dependency.
+
+### Local HIL command (NUCLEO-F446RE)
+
+```
+python3 boards/nucleo-f446re/run_nucleo_hil.py --quarry-dir /home/igor/work/quarry
+```
+
+`--quarry-dir` defaults to that path already, so a bare invocation from the repo root is normally sufficient. `--harness-dir` defaults to this board's own `firmware/` subdirectory. Same exit-code contract as VisionCB (0 `PASS`, 1 `TEST_FAILURE`, 2 `INFRASTRUCTURE_ERROR`, 3 `RECOVERY_REQUIRED` — the last meaning the firmware didn't report a result after flash+reset within timeout, warranting a physical check of the USB connection/board rather than an automatic retry).
+
+**No CI wiring yet**: unlike VisionCB, there is no self-hosted GitHub Actions workflow for NUCLEO-F446RE today — `run_nucleo_hil.py` is local-only for now.
 
 ## GitHub Actions: self-hosted VisionCB HIL
 
