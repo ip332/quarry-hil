@@ -145,6 +145,6 @@ jobs:
             0) echo "PASS" ;;
             1) echo "::error::VisionCB HIL: Quarry functional TEST_FAILURE (exit 1) -- see uploaded result.json"; exit 1 ;;
             2) echo "::error::VisionCB HIL: INFRASTRUCTURE_ERROR (exit 2) -- see uploaded runner.log"; exit 1 ;;
-            3) echo "::error::VisionCB HIL: RECOVERY_REQUIRED (exit 3) -- board needs a physical power-cycle before the next run"; exit 1 ;;
+            3) echo "::error::VisionCB HIL: RECOVERY_REQUIRED (exit 3) -- board still unresponsive after an automatic relay power-cycle retry, needs physical investigation"; exit 1 ;;
             *) echo "::error::VisionCB HIL: unexpected exit code ${{ steps.hil.outputs.exit_code }}"; exit 1 ;;
           esac

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """VisionCB Cortex-M4F local HIL runner (Phase 8).
 
-One-command execution of the proven Phase 6/7 manual procedure:
+One-command execution of the proven Phase 6/7 manual procedure, now with
+relay-controlled board power (see power_relay.py):
 
-    build -> transfer -> U-Boot -> bootaux -> resume Linux ->
-    storage safety -> collect DTCM result -> validate -> JSON
+    power-cycle -> catch U-Boot -> resume Linux -> transfer -> bootaux ->
+    resume Linux -> storage safety -> collect DTCM result -> validate -> JSON
 
 Everything board-specific (serial identity, U-Boot commands, SD/eMMC
 device paths, the DTCM physical alias) lives in this file and its
@@ -15,8 +16,8 @@ Exit codes (stable, documented contract for future CI use):
     0  PASS
     1  TEST_FAILURE          -- board reached a result, but it was a fail
     2  INFRASTRUCTURE_ERROR  -- build/device/transfer/storage-safety problem
-    3  RECOVERY_REQUIRED     -- board unresponsive or in an unexpected state;
-                                needs a physical power-cycle before retrying
+    3  RECOVERY_REQUIRED     -- board still unresponsive after a power-cycle
+                                retry; needs physical/hardware investigation
 """
 
 import argparse
@@ -33,6 +34,7 @@ import time
 _hil_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(_hil_root, "infrastructure", "core"))
 from serial_link import SerialLink, SerialTimeout, resolve_segger_jlink_device  # noqa: E402
+import power_relay  # noqa: E402
 
 SEGGER_SERIAL_NUMBER = "000900003460"
 BAUD = 115200
@@ -199,63 +201,52 @@ def discover_device(log):
 # STATE: acquire console / classify current board state
 # ---------------------------------------------------------------------------
 
-UBOOT_PATTERN = re.compile(r"u-boot=>\s*$", re.MULTILINE)
 LOGIN_PATTERN = re.compile(r"login:\s*$", re.MULTILINE)
-# Root shell prompt for an *already* logged-in session (e.g. left over from a
-# prior run in this same process, or a prior manual session) -- distinct from
-# a fresh "login:" banner, which requires sending credentials.
-SHELL_PROMPT_PATTERN = re.compile(r"root@[\w-]+:\S*#\s*$", re.MULTILINE)
+
+UBOOT_CATCH_TIMEOUT_SECONDS = 15
 
 
-def classify_console(link, log, timeout=20):
-    """Send one Enter and classify what's on the other end.
+def acquire_console_via_power_cycle(link, log, attempts=2):
+    """Power-cycle the board via the relay and catch its U-Boot prompt
+    before autoboot falls through to the eMMC/factory image.
 
-    Three real possibilities were observed in practice, not two: a fresh
-    U-Boot prompt, a fresh Linux "login:" banner (needs credentials), and
-    -- missed by an earlier version of this function, which mis-reported
-    a real, valid shell prompt as UNRESPONSIVE -- an *already logged in*
-    root shell left over from a previous session. The banner text that
-    would normally confirm which OS image this is isn't necessarily still
-    in the buffer for that third case, so it's verified directly with a
-    safe, read-only command instead of trusted blindly. Never sends
-    credentials against an unrecognized system in either case."""
-    log.log("ACQUIRE_CONSOLE", "classifying current board state (timeout=%ds)" % timeout)
-    link.clear_buffer()
-    link.send_raw(b"\r\n")
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        text = link.snapshot_text()
-        if UBOOT_PATTERN.search(text):
-            log.log("ACQUIRE_CONSOLE", "state=UBOOT")
-            return "UBOOT", text
-        if LOGIN_PATTERN.search(text):
-            if EXPECTED_OS_MARKER in text:
-                log.log("ACQUIRE_CONSOLE", "state=LOGIN_PROMPT_EXPECTED (banner contains %r)" % EXPECTED_OS_MARKER)
-                return "LOGIN_PROMPT_EXPECTED", text
+    This replaces the old classify-whatever-state-it's-currently-in entry
+    point: without power control, the runner had no way to know whether
+    the board was fresh, mid-session, or hung, so it had to distinguish
+    U-Boot/login/already-logged-in-shell/unresponsive by inspection. With
+    the relay, every run (and every recovery attempt) starts from the
+    same known state -- board powered off, then on -- so it only has to
+    win the same autoboot-countdown race the README's manual recovery
+    procedure describes, now automated with repeated keypresses via
+    SerialLink.catch_uboot_prompt instead of a human watching the console.
+
+    Retries the full power-cycle (not just the keypress race) on a missed
+    window, since the only way autoboot could have won is a bad power
+    transition or console timing, both of which a fresh cycle can fix.
+    """
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        log.log(
+            "ACQUIRE_CONSOLE",
+            "power-cycle attempt %d/%d: cycling board power via relay" % (attempt, attempts),
+        )
+        power_relay.power_cycle(log)
+        link.clear_buffer()
+        try:
+            text = link.catch_uboot_prompt(timeout=UBOOT_CATCH_TIMEOUT_SECONDS)
+            log.log("ACQUIRE_CONSOLE", "state=UBOOT (caught after power-cycle attempt %d)" % attempt)
+            return text
+        except SerialTimeout as e:
+            last_error = e
             log.log(
                 "ACQUIRE_CONSOLE",
-                "state=LOGIN_PROMPT_UNEXPECTED -- login banner present but does "
-                "not contain %r; NOT attempting login" % EXPECTED_OS_MARKER,
+                "attempt %d/%d: did not catch U-Boot prompt within %ds after power-on "
+                "(likely autobooted past the window): %s"
+                % (attempt, attempts, UBOOT_CATCH_TIMEOUT_SECONDS, e),
             )
-            return "LOGIN_PROMPT_UNEXPECTED", text
-        if SHELL_PROMPT_PATTERN.search(text):
-            log.log("ACQUIRE_CONSOLE", "shell prompt already present -- verifying OS identity before trusting it")
-            link.clear_buffer()
-            link.send_line("cat /etc/issue")
-            time.sleep(1.0)
-            verify_text = link.snapshot_text()
-            if EXPECTED_OS_MARKER in verify_text:
-                log.log("ACQUIRE_CONSOLE", "state=SHELL_LOGGED_IN_EXPECTED (verified %r)" % EXPECTED_OS_MARKER)
-                return "SHELL_LOGGED_IN_EXPECTED", verify_text
-            log.log(
-                "ACQUIRE_CONSOLE",
-                "state=SHELL_LOGGED_IN_UNEXPECTED -- shell prompt present but "
-                "/etc/issue does not contain %r: %r" % (EXPECTED_OS_MARKER, verify_text),
-            )
-            return "SHELL_LOGGED_IN_UNEXPECTED", verify_text
-        time.sleep(0.2)
-    log.log("ACQUIRE_CONSOLE", "state=UNRESPONSIVE (no recognizable prompt within timeout)")
-    return "UNRESPONSIVE", link.snapshot_text()
+    raise RecoveryRequired(
+        "did not catch a U-Boot prompt after %d power-cycle attempt(s): %s" % (attempts, last_error)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -565,6 +556,44 @@ def validate_result(result, log):
     log.log("VALIDATE", "all checks passed")
 
 
+def run_hardware_sequence(link, log, fw_info, stack_top, pc_entry, args):
+    """One full attempt at the board sequence: power-cycle, resume Linux,
+    transfer firmware, run the M4 workload, collect the result.
+
+    Raises RecoveryRequired if the board never becomes responsive at any
+    step; the caller decides whether to retry (see main()'s single
+    power-cycle retry below)."""
+    acquire_console_via_power_cycle(link, log)
+    log.log("ACQUIRE_CONSOLE", "at U-Boot prompt with no firmware transferred yet -- resuming Linux first")
+    uboot_resume_linux(link, log)
+    login(link, log)
+
+    verify_sd_root_and_unmount_emmc(link, log)
+
+    remote_bin_path = transfer_firmware(link, log, fw_info["bin_path"], fw_info["sha256"])
+    remote_bin_name = os.path.basename(remote_bin_path)
+
+    reader_source = os.path.join(args.harness_dir, "read_bench_result.c")
+    # Reader must be transferred/compiled while Linux is up, before reboot.
+    remote_reader_bin = ensure_reader_on_target(link, log, reader_source)
+
+    log.log("ENTER_UBOOT", "issuing reboot from live shell")
+    link.clear_buffer()
+    link.send_line("reboot")
+    try:
+        link.catch_uboot_prompt(timeout=30)
+    except SerialTimeout as e:
+        raise RecoveryRequired("could not catch U-Boot prompt after reboot: %s" % e)
+    log.log("ENTER_UBOOT", "U-Boot prompt caught")
+
+    uboot_load_and_start_m4(link, log, remote_bin_name, stack_top, pc_entry)
+    uboot_resume_linux(link, log)
+    login(link, log)
+    verify_sd_root_and_unmount_emmc(link, log)
+
+    return collect_result(link, log, remote_reader_bin)
+
+
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
@@ -629,53 +658,21 @@ def main():
 
         link = SerialLink(device, baud=BAUD, log_file=console_log_path)
 
-        state, _text = classify_console(link, log)
-        if state == "UNRESPONSIVE":
-            raise RecoveryRequired("board did not respond to console input -- physical power-cycle required")
-        if state in ("LOGIN_PROMPT_UNEXPECTED", "SHELL_LOGGED_IN_UNEXPECTED"):
-            raise RecoveryRequired(
-                "board is running an unexpected OS image (missing %r marker) -- "
-                "not proceeding against an unrecognized system; physical "
-                "power-cycle and manual investigation required" % EXPECTED_OS_MARKER
-            )
-        if state == "UBOOT":
-            # Need Linux to transfer firmware (base64 over a shell) -- resume
-            # the existing SD image first, without touching the M4 yet.
-            log.log("ACQUIRE_CONSOLE", "at U-Boot prompt with no firmware transferred yet -- resuming Linux first")
-            uboot_resume_linux(link, log)
-            login(link, log)
-        elif state == "LOGIN_PROMPT_EXPECTED":
-            log.log("ACQUIRE_CONSOLE", "fresh login banner confirmed, logging in")
-            login(link, log)
-        elif state == "SHELL_LOGGED_IN_EXPECTED":
-            log.log("ACQUIRE_CONSOLE", "already logged in with verified OS identity, skipping login")
-        else:
-            raise InfrastructureError("unhandled console state: %r" % (state,))
-
-        verify_sd_root_and_unmount_emmc(link, log)
-
-        remote_bin_path = transfer_firmware(link, log, fw_info["bin_path"], fw_info["sha256"])
-        remote_bin_name = os.path.basename(remote_bin_path)
-
-        reader_source = os.path.join(args.harness_dir, "read_bench_result.c")
-        # Reader must be transferred/compiled while Linux is up, before reboot.
-        remote_reader_bin = ensure_reader_on_target(link, log, reader_source)
-
-        log.log("ENTER_UBOOT", "issuing reboot from live shell")
-        link.clear_buffer()
-        link.send_line("reboot")
         try:
-            link.catch_uboot_prompt(timeout=30)
-        except SerialTimeout as e:
-            raise RecoveryRequired("could not catch U-Boot prompt after reboot: %s" % e)
-        log.log("ENTER_UBOOT", "U-Boot prompt caught")
+            board_result = run_hardware_sequence(link, log, fw_info, stack_top, pc_entry, args)
+        except RecoveryRequired as e:
+            # The board was unresponsive somewhere in the sequence -- the
+            # one case this relay integration exists for. Retry the whole
+            # sequence exactly once (its own first step is itself a fresh
+            # power-cycle) rather than failing straight to RECOVERY_REQUIRED;
+            # only a board that's still unresponsive after a clean power
+            # transition really needs the physical check that error implies.
+            log.log(
+                "RECOVERY",
+                "hardware sequence was unresponsive (%s) -- retrying once via power-cycle" % e,
+            )
+            board_result = run_hardware_sequence(link, log, fw_info, stack_top, pc_entry, args)
 
-        uboot_load_and_start_m4(link, log, remote_bin_name, stack_top, pc_entry)
-        uboot_resume_linux(link, log)
-        login(link, log)
-        verify_sd_root_and_unmount_emmc(link, log)
-
-        board_result = collect_result(link, log, remote_reader_bin)
         result_doc["benchmark"] = board_result
 
         validate_result(board_result, log)
