@@ -9,6 +9,7 @@ Initial hardware support targeted the VisionCB-8M-STD / NXP i.MX8M Mini Cortex-M
 - **Board**: VisionCB-8M-STD (SomLabs VisionSOM-8MM on a `STD` carrier board)
 - **SoC**: NXP i.MX8M Mini, Cortex-M4F auxiliary core at 200 MHz (application cores are A53, not used by this HIL flow)
 - **Host connection**: a single SEGGER J-Link probe (serial `000900003460`) provides the UART console over USB-CDC. The probe stays USB-enumerated even when the target board's own power is cycled independently — do not use USB re-enumeration as a signal that the board rebooted.
+- **Power control**: board power is switched through channel `QAAMZ_1` of a `usbrelay`-controlled USB relay (`infrastructure/core/power_relay.py`), independent of the J-Link probe's own USB connection. `run_visioncb_hil.py` power-cycles the board via this relay at the start of every run (see "Boot recovery" below) and again, automatically, if the hardware sequence hits `RECOVERY_REQUIRED` mid-run. Requires the `usbrelay` CLI on the runner host (`sudo apt-get install -y usbrelay`), plus HID device permissions for the user running the HIL host (already satisfied on `visioncb-hil-host`, same user/host as the rest of this flow).
 - **Storage**: the board has both a removable SD card and onboard eMMC. **The SD card holds the only image this HIL flow is validated against** (`kirkstone`-based Yocto Linux). The eMMC holds the board's original, untouched **factory image** (`hardknott`-based Yocto Linux) — a different, older OS release, kept purely as shipped. The two are not interchangeable and the runner actively refuses to proceed if it detects it isn't talking to the SD/kirkstone image.
 - **Other USB devices commonly present on the host and never touched by this flow**: an OpenMV camera, a Prolific USB-serial adapter. Device discovery always resolves through `/dev/serial/by-id/usb-SEGGER_J-Link_000900003460-if00` — never a raw `/dev/ttyACM*` index, which is not stable across boots.
 
@@ -27,22 +28,17 @@ Both flags default to those paths already, so a bare invocation from the repo ro
 | 0 | `PASS` | board reached a result, correctness validated |
 | 1 | `TEST_FAILURE` | board reached a result, but it failed validation |
 | 2 | `INFRASTRUCTURE_ERROR` | build/device/transfer/storage-safety problem |
-| 3 | `RECOVERY_REQUIRED` | board unresponsive, or running an unrecognized OS image — needs a physical power-cycle before retrying |
+| 3 | `RECOVERY_REQUIRED` | board still unresponsive after an automatic relay power-cycle retry — needs physical/hardware investigation |
 
 ## Boot recovery: the eMMC/autoboot race (important, read before debugging a `RECOVERY_REQUIRED`)
 
 The board's **factory U-Boot `bootcmd` autoboots the eMMC (`hardknott`) image by default**. Reaching the SD/kirkstone image has never been the automatic path — it requires **interrupting U-Boot's autoboot countdown** (`Hit any key to stop autoboot: 2 1 0`, roughly a 3-second window) before it falls through to eMMC, then driving the proven SD-boot sequence (`mmc dev 0` / `fatload` / `booti`), which `run_visioncb_hil.py` already automates once it reaches an interactive `u-boot=>` prompt.
 
-If the board is *already sitting mid-session* (a live Linux shell, reachable at either OS), the runner instead uses a **software `reboot`** from that shell to cycle back through U-Boot — this is fast, reliable, and requires no physical action. This is the path used for essentially all normal, healthy HIL runs (including every run driven by the GitHub Actions workflow below): the board only needs a *physical* power-cycle recovery when it's cold or hung, not between consecutive healthy runs.
+**Power control is now automated** (`infrastructure/core/power_relay.py`, relay channel `QAAMZ_1`). Every run starts by power-cycling the board via the relay and immediately racing the same autoboot-countdown window described above with repeated keypresses (`SerialLink.catch_uboot_prompt`) — the exact procedure that used to require a human watching the console. This removes the old ambiguity about what state the board was already in (fresh/mid-session/hung/unresponsive): every run, and every recovery attempt, now starts from the same known state.
 
-**On a cold power-on** (host reboot, board power loss, or a genuinely hung board that needed a physical power-cycle), there is currently a real timing race: the runner's console classifier sends a single keypress on connect, and if the board has already sailed past the autoboot countdown and landed on the eMMC/`hardknott` login prompt by the time the runner attaches, it correctly refuses to guess at OS identity or send credentials to an unconfirmed system, and returns `RECOVERY_REQUIRED` with the message `physical power-cycle and manual investigation required`.
+Within a single run, the *second* boot (after firmware has been transferred, to load and start the M4 workload) still uses a **software `reboot`** issued from the live Linux shell rather than another power-cycle — no need to re-win the eMMC race there, since U-Boot is being re-entered from a session the runner is already driving, not raced from cold.
 
-**Recovery procedure** (current, manual):
-1. Physically power-cycle the board.
-2. Immediately watch the console and send repeated harmless `\r\n` keypresses (e.g. every ~300ms) for up to ~20-30s to reliably land inside the autoboot countdown window, or simply re-run `run_visioncb_hil.py` promptly after the power-cycle and be ready to repeat if it lands on the eMMC prompt again.
-3. Once `run_visioncb_hil.py` reports `state=UBOOT` (or completes a full `PASS`), the board is healthy and stays healthy across further runs via the software-`reboot` path — no further physical action is needed until the next cold/hung state.
-
-**Known limitation, explicitly not yet resolved**: there is no automatic/remote power control for the board today. A USB-controlled 12V relay has been ordered to eventually make this recovery step scriptable and reliable without a human present at the physical hardware, but it is not yet delivered, installed, or integrated into any workflow. Until then, cold/hung-board recovery is a manual, human-in-the-loop procedure — this is a real, current limitation, not a hypothetical one. Integrating the relay is planned as a separate follow-up phase once the exact hardware, its USB protocol, and its default power-on state have been physically verified; no speculative relay code exists in this repository.
+**Automatic recovery**: if `run_hardware_sequence()` hits `RecoveryRequired` at any step (autoboot window missed twice in a row, Linux not reached after the mid-run reboot, etc.), `run_visioncb_hil.py` retries the *entire* hardware sequence exactly once — whose own first step is itself a fresh power-cycle. Only a board still unresponsive after that clean power transition surfaces as `RECOVERY_REQUIRED`, at which point it genuinely warrants physical/hardware investigation rather than another automatic retry (`RECOVERY_REQUIRED` remains a firm stop, not an unbounded retry loop).
 
 ## Safety constraints (all enforced by `run_visioncb_hil.py`, not just documented)
 
@@ -50,8 +46,8 @@ If the board is *already sitting mid-session* (a live Linux shell, reachable at 
 - **eMMC is never written**: any `mmcblk2*` partitions the stock image auto-mounts are unmounted (read-only from this flow's perspective); no `mmcblk2` write ever occurs.
 - **No persistent U-Boot changes**: no `saveenv` anywhere in the code; boot commands are issued interactively each run, never persisted.
 - **No SWD/JTAG/RTT**: all communication is over the SEGGER J-Link's UART passthrough only.
-- **No credentials sent to an unconfirmed system**: the console classifier verifies OS identity (banner text, or a safe read-only `cat /etc/issue`) before ever attempting login — see the eMMC/autoboot section above.
-- **No indefinite retries against a hung board**: `RECOVERY_REQUIRED` is a firm stop, not a retry loop.
+- **No credentials sent to an unconfirmed system**: the runner always drives its own boot from a freshly power-cycled `u-boot=>` prompt to the SD/kirkstone image via explicit U-Boot commands, and `uboot_resume_linux()` verifies the login banner contains the expected OS marker before `login()` ever sends credentials.
+- **No indefinite retries against a hung board**: the hardware sequence gets exactly one power-cycle retry (see "Boot recovery" above); a board still unresponsive after that returns `RECOVERY_REQUIRED` as a firm stop, not an unbounded retry loop.
 
 ## NUCLEO-F446RE hardware
 
@@ -105,4 +101,4 @@ The `quarry_ref` accepts a branch name, tag, or commit SHA. The exact resolved c
 
 **Release validation**: there is currently **no automatic Quarry→quarry-hil cross-repo trigger** — that would require a new PAT/secret stored in the Quarry repository that does not yet exist, and none was fabricated. Today, release validation means a human manually dispatches `visioncb-hil.yml` with `quarry_ref` set to the release/RC tag after cutting it in Quarry. This workflow **runs against** a given ref; it does not currently **block** any Quarry release — those are two different things, and only the former is actually implemented.
 
-**Current status honestly stated**: normal scheduled HIL execution (nightly, manual dispatch, software `reboot` between healthy runs) is automated end-to-end. Recovery from a cold power-on race or a genuinely hung board still requires a human physically at the hardware — this is **not** a fully unattended system yet, and won't be until the ordered USB relay is delivered, installed, and integrated in a follow-up phase.
+**Current status honestly stated**: normal scheduled HIL execution (nightly, manual dispatch, power-cycle at the start of every run, software `reboot` for the in-run M4-load boot) is automated end-to-end for VisionCB, including recovery from a cold power-on race or an unresponsive board via the relay (`infrastructure/core/power_relay.py`, channel `QAAMZ_1`) — no human needs to be physically at the hardware for that case anymore. A board still unresponsive after the one automatic power-cycle retry (a genuine hardware fault, not just a missed timing window) still surfaces as `RECOVERY_REQUIRED` and needs manual investigation; that residual case is not, and cannot be, eliminated by power control alone.
