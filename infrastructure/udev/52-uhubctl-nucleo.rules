@@ -1,0 +1,5 @@
+# Grants the plugdev group control access to the VIA Labs VL812 USB2.0 hub
+# (2109:2812) that the NUCLEO-F446RE's ST-LINK/V2.1 sits behind, so
+# uhubctl can power-cycle that port without root. See
+# infrastructure/core/usb_hub_power.py and infrastructure/udev/README.md.
+SUBSYSTEM=="usb", ATTR{idVendor}=="2109", ATTR{idProduct}=="2812", MODE="0664", GROUP="plugdev"

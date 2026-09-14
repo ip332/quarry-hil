@@ -1,0 +1,15 @@
+# Prevents udisks2/gvfs from auto-mounting the ST-LINK/V2.1's own
+# mass-storage LUN (NOD_F446RE) on the NUCLEO-F446RE board. That LUN is
+# unused by this HIL flow (flashing goes over SWD via st-flash, not
+# drag-and-drop), and the HIL runner power-cycles this exact USB port
+# repeatedly and unattended -- an auto-mounted volume there is unwanted
+# noise at best, and on the headless self-hosted CI host (no desktop
+# session to grant mount permission) a source of friction, at worst.
+#
+# Matched via ATTRS{serial} (a plain sysfs attribute available
+# immediately) rather than ENV{ID_SERIAL_SHORT} -- the latter is only
+# populated later, by 60-persistent-storage.rules's IMPORT{builtin}=
+# "usb_id", so a rule keyed on it here (evaluated earlier, by filename
+# sort order) would never actually match. See
+# infrastructure/udev/README.md for how this was diagnosed.
+SUBSYSTEM=="block", ATTRS{serial}=="0669FF565271525067071140", ENV{UDISKS_IGNORE}="1"
