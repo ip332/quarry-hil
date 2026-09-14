@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """NUCLEO-F446RE local HIL runner.
 
-One-command execution of: build -> flash (SWD via ST-LINK/V2.1) -> reset ->
-capture the firmware's self-reported result over its UART (ST-LINK VCP) ->
-validate -> JSON.
+One-command execution of: power-cycle the ST-LINK's USB hub port -> flash
+(SWD via ST-LINK/V2.1) -> reset -> capture the firmware's self-reported
+result over its UART (ST-LINK VCP) -> validate -> JSON.
 
 Unlike VisionCB-8M-STD (a Linux-hosted M4 auxiliary core reached over
 U-Boot/eMMC/SD boot plumbing), NUCLEO-F446RE is a standalone chip: it has
@@ -24,8 +24,8 @@ board runners):
     0  PASS
     1  TEST_FAILURE          -- board reached a result, but it was a fail
     2  INFRASTRUCTURE_ERROR  -- build/device/flash/transfer problem
-    3  RECOVERY_REQUIRED     -- board unresponsive after flash+reset;
-                                needs a physical check before retrying
+    3  RECOVERY_REQUIRED     -- board still unresponsive after a USB-hub-port
+                                power-cycle retry; needs physical investigation
 """
 
 import argparse
@@ -38,10 +38,12 @@ import shutil
 import struct
 import subprocess
 import sys
+import time
 
 _hil_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(_hil_root, "infrastructure", "core"))
 from serial_link import SerialLink, SerialTimeout, resolve_stm32_stlink_device  # noqa: E402
+import usb_hub_power  # noqa: E402
 
 STLINK_SERIAL_NUMBER = "0669FF565271525067071140"
 BAUD = 115200
@@ -220,18 +222,57 @@ def build_firmware(harness_dir, log):
 
 
 # ---------------------------------------------------------------------------
-# STATE: device discovery
+# STATE: device discovery / power control
 # ---------------------------------------------------------------------------
 
+REENUMERATE_TIMEOUT_SECONDS = 15
+REENUMERATE_POLL_SECONDS = 0.5
 
-def discover_console_device(log):
-    log.log("DISCOVER", "resolving ST-LINK/V2.1 VCP %s via /dev/serial/by-id" % STLINK_SERIAL_NUMBER)
-    try:
-        device = resolve_stm32_stlink_device(STLINK_SERIAL_NUMBER)
-    except RuntimeError as e:
-        raise InfrastructureError(str(e))
-    log.log("DISCOVER", "resolved device: %s" % device)
-    return device
+
+def acquire_device_via_power_cycle(log, attempts=2):
+    """Power-cycle the ST-LINK's USB hub port and wait for it to
+    re-enumerate, returning the freshly resolved device path.
+
+    Unlike VisionCB (a separate relay powers the board independently of
+    its always-enumerated debug probe), NUCLEO's ST-LINK *is* both the
+    debug probe and the thing being power-cycled -- it fully disappears
+    and reappears here. The /dev/serial/by-id path is stable across that,
+    but the /dev/ttyACM* index it resolves to is not (see
+    serial_link.py's own rationale), so callers must always re-resolve
+    via this function rather than reusing a previously resolved path.
+
+    Retries the full power-cycle on a failed re-enumeration, mirroring
+    VisionCB's acquire_console_via_power_cycle: the only way it could
+    fail to come back is a bad power transition or enumeration timing,
+    both of which a fresh cycle can fix.
+    """
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        log.log(
+            "ACQUIRE_DEVICE",
+            "power-cycle attempt %d/%d: cycling ST-LINK USB hub port" % (attempt, attempts),
+        )
+        usb_hub_power.power_cycle(log)
+        deadline = time.monotonic() + REENUMERATE_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            try:
+                device = resolve_stm32_stlink_device(STLINK_SERIAL_NUMBER)
+                log.log(
+                    "ACQUIRE_DEVICE",
+                    "re-enumerated at %s (power-cycle attempt %d)" % (device, attempt),
+                )
+                return device
+            except RuntimeError as e:
+                last_error = e
+                time.sleep(REENUMERATE_POLL_SECONDS)
+        log.log(
+            "ACQUIRE_DEVICE",
+            "attempt %d/%d: device did not re-enumerate within %ds after power-on: %s"
+            % (attempt, attempts, REENUMERATE_TIMEOUT_SECONDS, last_error),
+        )
+    raise RecoveryRequired(
+        "ST-LINK did not re-enumerate after %d power-cycle attempt(s): %s" % (attempts, last_error)
+    )
 
 
 def require_st_flash(log):
@@ -381,6 +422,32 @@ def validate_result(benchmark, log):
     log.log("VALIDATE", "all checks passed")
 
 
+def run_hardware_sequence(fw_info, run_dir, log):
+    """One full attempt: power-cycle the ST-LINK, flash, reset, and
+    collect the result. Raises RecoveryRequired if the board never
+    becomes responsive; the caller decides whether to retry (see
+    main()'s single power-cycle retry below).
+
+    Returns (console_device, benchmark). Opens and closes its own
+    SerialLink -- a retry can't reuse the old one, since the device may
+    re-enumerate at a different /dev/ttyACM* index."""
+    console_device = acquire_device_via_power_cycle(log)
+    console_log_path = os.path.join(run_dir, "console.log")
+
+    link = SerialLink(console_device, baud=BAUD, log_file=console_log_path)
+    try:
+        link.clear_buffer()
+
+        flash_firmware(fw_info["bin_path"], log)
+        reset_target(log)
+
+        raw_result = collect_result(link, log)
+    finally:
+        link.close()
+
+    return console_device, build_benchmark_doc(raw_result)
+
+
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
@@ -401,7 +468,6 @@ def main():
     run_dir = os.path.join(args.runs_dir, timestamp)
     os.makedirs(run_dir, exist_ok=True)
     log = Logger(run_dir)
-    console_log_path = os.path.join(run_dir, "console.log")
 
     result_doc = {
         "schema_version": 1,
@@ -409,7 +475,6 @@ def main():
         "run_dir": run_dir,
     }
 
-    link = None
     try:
         quarry_info = capture_quarry_provenance(args.quarry_dir, log)
         result_doc["quarry"] = quarry_info
@@ -419,7 +484,23 @@ def main():
         result_doc["toolchain"] = {"compiler": fw_info["compiler"], "flags": fw_info["flags"]}
 
         require_st_flash(log)
-        console_device = discover_console_device(log)
+
+        try:
+            console_device, benchmark = run_hardware_sequence(fw_info, run_dir, log)
+        except RecoveryRequired as e:
+            # The board was unresponsive somewhere in the sequence -- the
+            # one case this USB-power-cycle integration exists for. Retry
+            # the whole sequence exactly once (its own first step is
+            # itself a fresh power-cycle) rather than failing straight to
+            # RECOVERY_REQUIRED; only a board still unresponsive after a
+            # clean power transition really needs the physical check that
+            # error implies.
+            log.log(
+                "RECOVERY",
+                "hardware sequence was unresponsive (%s) -- retrying once via power-cycle" % e,
+            )
+            console_device, benchmark = run_hardware_sequence(fw_info, run_dir, log)
+
         result_doc["target"] = {
             "board": "NUCLEO-F446RE",
             "soc": "STMicroelectronics STM32F446RE",
@@ -427,15 +508,6 @@ def main():
             "clock_hz": SYSCLK_HZ,
             "serial_device": console_device,
         }
-
-        link = SerialLink(console_device, baud=BAUD, log_file=console_log_path)
-        link.clear_buffer()
-
-        flash_firmware(fw_info["bin_path"], log)
-        reset_target(log)
-
-        raw_result = collect_result(link, log)
-        benchmark = build_benchmark_doc(raw_result)
         result_doc["benchmark"] = benchmark
 
         validate_result(benchmark, log)
@@ -455,8 +527,6 @@ def main():
         log.log("INFRASTRUCTURE_ERROR", "unexpected exception: %r" % (e,))
         exit_code = 2
     finally:
-        if link is not None:
-            link.close()
         result_path = os.path.join(run_dir, "result.json")
         with open(result_path, "w") as f:
             json.dump(result_doc, f, indent=2, default=str)
