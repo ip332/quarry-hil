@@ -1,0 +1,150 @@
+name: NUCLEO-F446RE HIL
+
+# Physical hardware-in-the-loop validation against a real NUCLEO-F446RE
+# board (STM32F446RE, standalone -- no OS/U-Boot/eMMC, unlike VisionCB).
+# Thin orchestration wrapper only -- all hardware state-machine logic
+# lives in run_nucleo_hil.py and its supporting modules, not here. Mirrors
+# visioncb-hil.yml's structure; see that file for the fuller rationale on
+# points that are identical here (e.g. never triggering on pull_request).
+#
+# Runs on the same physical host/self-hosted runner as VisionCB HIL (one
+# host, two boards, two separate USB connections) -- targeted here via the
+# runner's existing generic `cortex-m4` label rather than a new
+# board-specific one, so this workflow requires no change to the runner's
+# registration. GitHub Actions only ever executes one job at a time on a
+# given runner instance, so this and VisionCB HIL can never physically
+# collide even though they use different concurrency groups.
+#
+# Triggers:
+#   - workflow_dispatch: manual runs, and the release/RC validation
+#     mechanism (dispatch with `quarry_ref` set to the release tag/SHA).
+#   - schedule: nightly run against current Quarry main, offset 20 minutes
+#     after VisionCB's 03:17 UTC slot so a healthy VisionCB run (~1-2 min)
+#     has cleared the shared runner first rather than queuing behind it.
+#
+# The requested Quarry ref is resolved in the same dedicated CI-only local
+# clone VisionCB HIL uses (/home/igor/.cache/visioncb-hil/quarry-ci-checkout
+# on the runner host) -- intentionally shared, not duplicated: it's safe
+# because the two workflows can never run concurrently on this single
+# runner, and a second clone would just be a redundant checkout of the
+# same repository on the same host.
+
+on:
+  workflow_dispatch:
+    inputs:
+      quarry_ref:
+        description: "Quarry branch, tag, or commit SHA to validate (release/RC validation: pass the release tag)"
+        required: false
+        default: main
+  schedule:
+    - cron: "37 3 * * *"
+
+# Exactly one physical NUCLEO-F446RE hardware session at a time. A second
+# run queues behind the active one rather than cancelling it.
+concurrency:
+  group: nucleo-hil-hardware
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  QUARRY_CI_CHECKOUT: /home/igor/.cache/visioncb-hil/quarry-ci-checkout
+
+jobs:
+  hil:
+    name: Physical NUCLEO-F446RE HIL run
+    runs-on: [self-hosted, linux, x64, cortex-m4]
+    # Generous but bounded: a healthy run completes in well under a minute
+    # (build + flash + a sub-second UART transfer); this leaves headroom
+    # for a slow/retried flash without risking an indefinitely hung job.
+    # The runner script itself never retries a hung board --
+    # RECOVERY_REQUIRED exits promptly if the firmware doesn't report.
+    timeout-minutes: 15
+    steps:
+      - name: Checkout quarry-hil
+        uses: actions/checkout@v4
+
+      - name: Resolve requested Quarry ref
+        id: resolve
+        run: |
+          set -euo pipefail
+          REF="${{ inputs.quarry_ref || 'main' }}"
+          git -C "$QUARRY_CI_CHECKOUT" fetch origin --tags --prune --force
+          if git -C "$QUARRY_CI_CHECKOUT" rev-parse --verify "origin/$REF" >/dev/null 2>&1; then
+            git -C "$QUARRY_CI_CHECKOUT" checkout --detach "origin/$REF"
+          else
+            git -C "$QUARRY_CI_CHECKOUT" checkout --detach "$REF"
+          fi
+          RESOLVED=$(git -C "$QUARRY_CI_CHECKOUT" rev-parse HEAD)
+          echo "requested_ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "resolved_sha=$RESOLVED" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Quarry ref resolved"
+            echo "Requested: \`$REF\`"
+            echo "Resolved commit: \`$RESOLVED\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run NUCLEO-F446RE HIL
+        id: hil
+        run: |
+          set +e
+          python3 boards/nucleo-f446re/run_nucleo_hil.py \
+            --quarry-dir "$QUARRY_CI_CHECKOUT"
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Locate run directory
+        id: rundir
+        if: always()
+        run: |
+          set -euo pipefail
+          LATEST=$(ls -td boards/nucleo-f446re/runs/*/ | head -1)
+          echo "run_dir=$LATEST" >> "$GITHUB_OUTPUT"
+
+      - name: Summarize result
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 - "${{ steps.rundir.outputs.run_dir }}result.json" >> "$GITHUB_STEP_SUMMARY" << 'EOF'
+          import json, sys
+          d = json.load(open(sys.argv[1]))
+          print(f"### NUCLEO-F446RE HIL result: {d.get('result')}")
+          q = d.get("quarry", {})
+          print(f"Quarry: branch=`{q.get('branch')}` commit=`{q.get('commit')}` dirty={q.get('dirty')}")
+          fw = d.get("firmware", {})
+          if fw:
+              print(f"Firmware: `{fw.get('bin_name')}` sha256=`{fw.get('sha256')}`")
+          b = d.get("benchmark")
+          if b:
+              print(f"Encode: {b['encode_cycles']['mean']:.0f} cycles | "
+                    f"Decode: {b['decode_cycles']['mean']:.0f} cycles | "
+                    f"Round-trip: {b['roundtrip_cycles']['mean']:.0f} cycles | "
+                    f"Payload: {b['encoded_bytes']} bytes | "
+                    f"Stack watermark: {b['stack_watermark_bytes']} bytes | "
+                    f"Validation failures: {b['validation_failures']}")
+          if "error" in d:
+              print(f"Error: {d['error']}")
+          EOF
+
+      - name: Upload HIL result artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nucleo-hil-result-${{ github.run_id }}
+          path: |
+            ${{ steps.rundir.outputs.run_dir }}result.json
+            ${{ steps.rundir.outputs.run_dir }}runner.log
+            ${{ steps.rundir.outputs.run_dir }}console.log
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Fail job on non-PASS result
+        if: always()
+        run: |
+          case "${{ steps.hil.outputs.exit_code }}" in
+            0) echo "PASS" ;;
+            1) echo "::error::NUCLEO-F446RE HIL: Quarry functional TEST_FAILURE (exit 1) -- see uploaded result.json"; exit 1 ;;
+            2) echo "::error::NUCLEO-F446RE HIL: INFRASTRUCTURE_ERROR (exit 2) -- see uploaded runner.log"; exit 1 ;;
+            3) echo "::error::NUCLEO-F446RE HIL: RECOVERY_REQUIRED (exit 3) -- board needs a physical check (USB/ST-LINK connection) before the next run"; exit 1 ;;
+            *) echo "::error::NUCLEO-F446RE HIL: unexpected exit code ${{ steps.hil.outputs.exit_code }}"; exit 1 ;;
+          esac
