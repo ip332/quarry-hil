@@ -1,0 +1,8 @@
+# Grants the plugdev group control access to the VIA Labs VL812 USB2.0 hub
+# (2109:2812) on this host, so uhubctl can power-cycle its ports without
+# root. Two independent things sit behind different ports on this same
+# hub and both rely on this: NUCLEO-F446RE's ST-LINK (port 3, its power
+# *is* the board's power -- see infrastructure/core/usb_hub_power.py) and
+# VisionCB-8M-STD's SEGGER J-Link probe (port 1, recovered here when it
+# drops off the bus -- see run_visioncb_hil.py's discover_device()).
+SUBSYSTEM=="usb", ATTR{idVendor}=="2109", ATTR{idProduct}=="2812", MODE="0664", GROUP="plugdev"
