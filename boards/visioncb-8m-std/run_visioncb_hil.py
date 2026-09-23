@@ -16,8 +16,9 @@ Exit codes (stable, documented contract for future CI use):
     0  PASS
     1  TEST_FAILURE          -- board reached a result, but it was a fail
     2  INFRASTRUCTURE_ERROR  -- build/device/transfer/storage-safety problem
-    3  RECOVERY_REQUIRED     -- board still unresponsive after a power-cycle
-                                retry; needs physical/hardware investigation
+    3  RECOVERY_REQUIRED     -- board or J-Link probe still unresponsive/absent
+                                after a power-cycle retry; needs physical
+                                /hardware investigation
 """
 
 import argparse
@@ -35,9 +36,20 @@ _hil_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 sys.path.insert(0, os.path.join(_hil_root, "infrastructure", "core"))
 from serial_link import SerialLink, SerialTimeout, resolve_segger_jlink_device  # noqa: E402
 import power_relay  # noqa: E402
+import usb_hub_power  # noqa: E402
 
 SEGGER_SERIAL_NUMBER = "000900003460"
 BAUD = 115200
+
+# The J-Link probe's own USB connection -- separate from board power
+# (power_relay.py) -- has been observed to drop off the bus entirely and
+# need a real power cycle (what a human was doing by hand: unplug/replug
+# the hub) to come back. Same physical hub NUCLEO's ST-LINK sits behind,
+# different port -- see infrastructure/core/usb_hub_power.py.
+JLINK_HUB_LOCATION = "3-11.2"
+JLINK_HUB_PORT = "1"
+JLINK_REENUMERATE_TIMEOUT_SECONDS = 15
+JLINK_REENUMERATE_POLL_SECONDS = 0.5
 
 SD_ROOT_DEVICE = "/dev/mmcblk0p2"
 SD_BOOT_MMC_SPEC = "mmc 0:1"  # U-Boot's own device:partition syntax
@@ -187,14 +199,48 @@ def build_firmware(harness_dir, log):
 # ---------------------------------------------------------------------------
 
 
-def discover_device(log):
+def discover_device(log, power_cycle_attempts=2):
+    """Resolve the SEGGER J-Link probe via /dev/serial/by-id.
+
+    Tries a plain resolve first -- the probe isn't power-cycled on every
+    run the way NUCLEO's ST-LINK is, so most runs should find it
+    immediately with no extra delay. Only on failure does this fall back
+    to power-cycling the probe's own USB hub port and retrying, the same
+    recovery a human was doing by hand (unplug/replug the hub) and the
+    same pattern already proven for NUCLEO's ST-LINK."""
     log.log("DISCOVER", "resolving SEGGER J-Link %s via /dev/serial/by-id" % SEGGER_SERIAL_NUMBER)
     try:
         device = resolve_segger_jlink_device(SEGGER_SERIAL_NUMBER)
+        log.log("DISCOVER", "resolved device: %s" % device)
+        return device
     except RuntimeError as e:
-        raise InfrastructureError(str(e))
-    log.log("DISCOVER", "resolved device: %s" % device)
-    return device
+        last_error = e
+
+    for attempt in range(1, power_cycle_attempts + 1):
+        log.log(
+            "DISCOVER",
+            "probe not found (%s) -- power-cycle attempt %d/%d: cycling USB hub port %s-%s"
+            % (last_error, attempt, power_cycle_attempts, JLINK_HUB_LOCATION, JLINK_HUB_PORT),
+        )
+        usb_hub_power.power_cycle(JLINK_HUB_LOCATION, JLINK_HUB_PORT, log)
+        deadline = time.monotonic() + JLINK_REENUMERATE_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            try:
+                device = resolve_segger_jlink_device(SEGGER_SERIAL_NUMBER)
+                log.log("DISCOVER", "resolved device: %s (power-cycle attempt %d)" % (device, attempt))
+                return device
+            except RuntimeError as e:
+                last_error = e
+                time.sleep(JLINK_REENUMERATE_POLL_SECONDS)
+        log.log(
+            "DISCOVER",
+            "attempt %d/%d: probe still not found after power-cycle: %s" % (attempt, power_cycle_attempts, last_error),
+        )
+
+    raise RecoveryRequired(
+        "SEGGER J-Link probe not found after %d USB hub port power-cycle attempt(s): %s"
+        % (power_cycle_attempts, last_error)
+    )
 
 
 # ---------------------------------------------------------------------------
