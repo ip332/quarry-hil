@@ -203,11 +203,9 @@ def discover_device(log, power_cycle_attempts=2):
     """Resolve the SEGGER J-Link probe via /dev/serial/by-id.
 
     Tries a plain resolve first -- the probe isn't power-cycled on every
-    run the way NUCLEO's ST-LINK is, so most runs should find it
-    immediately with no extra delay. Only on failure does this fall back
+    run, so most runs should find it immediately with no extra delay. Only on failure does this fall back
     to power-cycling the probe's own USB hub port and retrying, the same
-    recovery a human was doing by hand (unplug/replug the hub) and the
-    same pattern already proven for NUCLEO's ST-LINK."""
+    recovery a human was doing by hand (unplug/replug the hub)."""
     log.log("DISCOVER", "resolving SEGGER J-Link %s via /dev/serial/by-id" % SEGGER_SERIAL_NUMBER)
     try:
         device = resolve_segger_jlink_device(SEGGER_SERIAL_NUMBER)
@@ -215,12 +213,25 @@ def discover_device(log, power_cycle_attempts=2):
         return device
     except RuntimeError as e:
         last_error = e
+    return recover_probe(log, "probe not found (%s)" % last_error, power_cycle_attempts)
 
+
+def recover_probe(log, reason, power_cycle_attempts=2):
+    """Power-cycle the J-Link's USB hub port and re-resolve it.
+
+    Covers both ways the probe has been seen to fail: dropping off the
+    bus entirely (discover_device's fallback), and staying enumerated
+    -- /dev/serial/by-id still resolves -- while its firmware is wedged
+    and the VCOM delivers zero bytes (seen after a mains power outage;
+    J-Link Commander couldn't connect to it either). The relay only
+    power-cycles the board, never the probe, so the second case needs
+    this even though discovery succeeded."""
+    last_error = None
     for attempt in range(1, power_cycle_attempts + 1):
         log.log(
             "DISCOVER",
-            "probe not found (%s) -- power-cycle attempt %d/%d: cycling USB hub port %s-%s"
-            % (last_error, attempt, power_cycle_attempts, JLINK_HUB_LOCATION, JLINK_HUB_PORT),
+            "%s -- power-cycle attempt %d/%d: cycling USB hub port %s-%s"
+            % (reason, attempt, power_cycle_attempts, JLINK_HUB_LOCATION, JLINK_HUB_PORT),
         )
         usb_hub_power.power_cycle(JLINK_HUB_LOCATION, JLINK_HUB_PORT, log)
         deadline = time.monotonic() + JLINK_REENUMERATE_TIMEOUT_SECONDS
@@ -238,8 +249,8 @@ def discover_device(log, power_cycle_attempts=2):
         )
 
     raise RecoveryRequired(
-        "SEGGER J-Link probe not found after %d USB hub port power-cycle attempt(s): %s"
-        % (power_cycle_attempts, last_error)
+        "SEGGER J-Link probe not found after %d USB hub port power-cycle attempt(s) (%s): %s"
+        % (power_cycle_attempts, reason, last_error)
     )
 
 
@@ -713,10 +724,17 @@ def main():
             # power-cycle) rather than failing straight to RECOVERY_REQUIRED;
             # only a board that's still unresponsive after a clean power
             # transition really needs the physical check that error implies.
+            # The probe is power-cycled too: an enumerated-but-wedged J-Link
+            # looks exactly like a silent board from here (see recover_probe).
             log.log(
                 "RECOVERY",
-                "hardware sequence was unresponsive (%s) -- retrying once via power-cycle" % e,
+                "hardware sequence was unresponsive (%s) -- retrying once via probe + board power-cycle" % e,
             )
+            link.close()
+            link = None
+            device = recover_probe(log, "retrying after unresponsive hardware sequence")
+            result_doc["target"]["serial_device"] = device
+            link = SerialLink(device, baud=BAUD, log_file=console_log_path)
             board_result = run_hardware_sequence(link, log, fw_info, stack_top, pc_entry, args)
 
         result_doc["benchmark"] = board_result
