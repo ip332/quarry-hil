@@ -38,13 +38,27 @@ import shutil
 import struct
 import subprocess
 import sys
+import time
 
 _hil_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(_hil_root, "infrastructure", "core"))
 from serial_link import SerialLink, SerialTimeout, resolve_stm32_stlink_device  # noqa: E402
+import usb_hub_power  # noqa: E402
 
 STLINK_SERIAL_NUMBER = "0669FF565271525067071140"
 BAUD = 115200
+
+# The on-board ST-LINK's USB connection is also the whole board's power,
+# so power-cycling its hub port is a full cold boot of probe + target.
+# Done at the start of every run: after a mains power outage the ST-LINK
+# was seen flashing fine but relaying zero UART bytes, then dropping off
+# the bus and failing re-enumeration (-71) until its port was cut. Same
+# physical hub as VisionCB's J-Link, different port -- see
+# infrastructure/core/usb_hub_power.py.
+STLINK_HUB_LOCATION = "3-11.2"
+STLINK_HUB_PORT = "3"
+STLINK_REENUMERATE_TIMEOUT_SECONDS = 15
+STLINK_REENUMERATE_POLL_SECONDS = 0.5
 
 FLASH_LOAD_ADDR = "0x08000000"
 SYSCLK_HZ = 16000000  # HSI, untouched post-reset default -- see nucleo_bench/uart.h
@@ -224,14 +238,39 @@ def build_firmware(harness_dir, log):
 # ---------------------------------------------------------------------------
 
 
-def discover_console_device(log):
-    log.log("DISCOVER", "resolving ST-LINK/V2.1 VCP %s via /dev/serial/by-id" % STLINK_SERIAL_NUMBER)
-    try:
-        device = resolve_stm32_stlink_device(STLINK_SERIAL_NUMBER)
-    except RuntimeError as e:
-        raise InfrastructureError(str(e))
-    log.log("DISCOVER", "resolved device: %s" % device)
-    return device
+def discover_console_device(log, power_cycle_attempts=2):
+    """Power-cycle the ST-LINK's hub port (= cold boot the whole board),
+    then resolve its VCP via /dev/serial/by-id once it re-enumerates."""
+    last_error = None
+    for attempt in range(1, power_cycle_attempts + 1):
+        log.log(
+            "DISCOVER",
+            "power-cycle attempt %d/%d: cycling USB hub port %s-%s"
+            % (attempt, power_cycle_attempts, STLINK_HUB_LOCATION, STLINK_HUB_PORT),
+        )
+        try:
+            usb_hub_power.power_cycle(STLINK_HUB_LOCATION, STLINK_HUB_PORT, log)
+        except usb_hub_power.UsbPortError as e:
+            raise InfrastructureError(str(e))
+        log.log("DISCOVER", "resolving ST-LINK/V2.1 VCP %s via /dev/serial/by-id" % STLINK_SERIAL_NUMBER)
+        deadline = time.monotonic() + STLINK_REENUMERATE_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            try:
+                device = resolve_stm32_stlink_device(STLINK_SERIAL_NUMBER)
+                log.log("DISCOVER", "resolved device: %s (power-cycle attempt %d)" % (device, attempt))
+                return device
+            except RuntimeError as e:
+                last_error = e
+                time.sleep(STLINK_REENUMERATE_POLL_SECONDS)
+        log.log(
+            "DISCOVER",
+            "attempt %d/%d: ST-LINK not found after power-cycle: %s" % (attempt, power_cycle_attempts, last_error),
+        )
+
+    raise RecoveryRequired(
+        "ST-LINK not found after %d USB hub port power-cycle attempt(s): %s"
+        % (power_cycle_attempts, last_error)
+    )
 
 
 def require_st_flash(log):
@@ -419,22 +458,33 @@ def main():
         result_doc["toolchain"] = {"compiler": fw_info["compiler"], "flags": fw_info["flags"]}
 
         require_st_flash(log)
-        console_device = discover_console_device(log)
         result_doc["target"] = {
             "board": "NUCLEO-F446RE",
             "soc": "STMicroelectronics STM32F446RE",
             "cpu": "Cortex-M4F",
             "clock_hz": SYSCLK_HZ,
-            "serial_device": console_device,
         }
 
-        link = SerialLink(console_device, baud=BAUD, log_file=console_log_path)
-        link.clear_buffer()
+        def run_hardware_sequence():
+            nonlocal link
+            if link is not None:
+                link.close()
+                link = None
+            console_device = discover_console_device(log)
+            result_doc["target"]["serial_device"] = console_device
+            link = SerialLink(console_device, baud=BAUD, log_file=console_log_path)
+            link.clear_buffer()
+            flash_firmware(fw_info["bin_path"], log)
+            reset_target(log)
+            return collect_result(link, log)
 
-        flash_firmware(fw_info["bin_path"], log)
-        reset_target(log)
-
-        raw_result = collect_result(link, log)
+        try:
+            raw_result = run_hardware_sequence()
+        except RecoveryRequired as e:
+            # Retry once from a fresh cold boot (the sequence's own first
+            # step) before asking for a physical check.
+            log.log("RECOVERY", "hardware sequence was unresponsive (%s) -- retrying once via power-cycle" % e)
+            raw_result = run_hardware_sequence()
         benchmark = build_benchmark_doc(raw_result)
         result_doc["benchmark"] = benchmark
 
