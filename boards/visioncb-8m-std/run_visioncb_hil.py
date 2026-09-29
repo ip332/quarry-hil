@@ -203,8 +203,7 @@ def discover_device(log, power_cycle_attempts=2):
     """Resolve the SEGGER J-Link probe via /dev/serial/by-id.
 
     Tries a plain resolve first -- the probe isn't power-cycled on every
-    run the way NUCLEO's ST-LINK is, so most runs should find it
-    immediately with no extra delay. Only on failure does this fall back
+    run, so most runs should find it immediately with no extra delay. Only on failure does this fall back
     to power-cycling the probe's own USB hub port and retrying, the same
     recovery a human was doing by hand (unplug/replug the hub)."""
     log.log("DISCOVER", "resolving SEGGER J-Link %s via /dev/serial/by-id" % SEGGER_SERIAL_NUMBER)
