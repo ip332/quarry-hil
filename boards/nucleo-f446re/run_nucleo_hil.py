@@ -38,6 +38,8 @@ import shutil
 import struct
 import subprocess
 import sys
+import tempfile
+import time
 
 _hil_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(_hil_root, "infrastructure", "core"))
@@ -278,15 +280,29 @@ def reset_target(log, timeout=15):
 # ---------------------------------------------------------------------------
 
 
-def collect_result(link, log, timeout=15):
+def collect_result(link, log, elf_path, timeout=15):
+    """Returns (result, transport): transport is "uart" normally, "swd" when
+    the UART stayed completely silent and the result was read from RAM."""
     log.log("COLLECT_RESULT", "waiting for firmware to stream its result over UART")
     try:
         _match, text = link.wait_for(RESULT_PATTERN, timeout=timeout)
     except SerialTimeout as e:
-        raise RecoveryRequired(
-            "firmware did not report a result within %ds after reset -- board may be "
-            "hung or not running the expected firmware; physical check required: %s" % (timeout, e)
+        if link.snapshot_text():
+            raise RecoveryRequired(
+                "firmware did not report a result within %ds after reset -- board may be "
+                "hung or not running the expected firmware; physical check required: %s" % (timeout, e)
+            )
+        # Zero bytes at all: seen after every host reboot (2026-09-29,
+        # 2026-10-01) -- the firmware ran and transmitted (USART2 TXE/TC
+        # set, g_result complete in RAM), but the ST-LINK's VCP bridge
+        # forwarded nothing until the USB cable was physically replugged.
+        # SWD still works then, so read the same bytes from RAM instead.
+        log.log(
+            "COLLECT_RESULT",
+            "WARNING: UART silent for %ds (ST-LINK VCP bridge stuck? replug the board's USB cable "
+            "to restore it) -- falling back to reading g_result over SWD" % timeout,
         )
+        return read_result_over_swd(elf_path, log), "swd"
 
     m = RESULT_PATTERN.search(text)
     hex_blob = m.group(1)
@@ -297,7 +313,10 @@ def collect_result(link, log, timeout=15):
             % (len(hex_blob), RESULT_WIRE_SIZE * 2, RESULT_WIRE_SIZE)
         )
 
-    raw = bytes.fromhex(hex_blob)
+    return parse_result(bytes.fromhex(hex_blob), log), "uart"
+
+
+def parse_result(raw, log):
     scalar_values = struct.unpack(RESULT_SCALAR_FORMAT, raw)
     result = dict(zip(RESULT_SCALAR_FIELDS, scalar_values))
     log.log(
@@ -306,6 +325,46 @@ def collect_result(link, log, timeout=15):
         % (result.get("result_code"), result.get("validation_failures")),
     )
     return result
+
+
+def read_result_over_swd(elf_path, log, timeout=15, poll_seconds=1.0):
+    """Read the same RESULT_WIRE_SIZE-byte prefix of g_result the firmware
+    streams over UART (report_result() hex-dumps exactly that), straight
+    from target RAM via st-flash. Only `counter` differs: it keeps ticking
+    after the report, and nothing validates it."""
+    rc, nm_out, err = run_host(["arm-none-eabi-nm", elf_path])
+    addr = None
+    for line in nm_out.splitlines():
+        parts = line.split()
+        if len(parts) == 3 and parts[2] == "g_result":
+            addr = "0x" + parts[0]
+    if rc != 0 or addr is None:
+        raise InfrastructureError("could not find g_result in %s: rc=%d %s" % (elf_path, rc, err))
+
+    deadline = time.monotonic() + timeout
+    with tempfile.TemporaryDirectory() as tmp:
+        out_path = os.path.join(tmp, "g_result.bin")
+        while True:
+            rc, out, err = run_host(
+                ["st-flash", "--serial", STLINK_SERIAL_NUMBER, "read", out_path, addr, str(RESULT_WIRE_SIZE)],
+                timeout=15,
+            )
+            if rc != 0:
+                raise InfrastructureError("st-flash read of g_result failed:\nstdout:\n%s\nstderr:\n%s" % (out, err))
+            with open(out_path, "rb") as f:
+                raw = f.read()
+            if len(raw) != RESULT_WIRE_SIZE:
+                raise InfrastructureError("st-flash read returned %d bytes, expected %d" % (len(raw), RESULT_WIRE_SIZE))
+            state = struct.unpack_from("<I", raw, 8)[0]
+            if state == QUARRY_BENCH_STATE_TEST_COMPLETE:
+                log.log("COLLECT_RESULT", "read g_result at %s over SWD (state=TEST_COMPLETE)" % addr)
+                return parse_result(raw, log)
+            if time.monotonic() >= deadline:
+                raise RecoveryRequired(
+                    "UART silent and g_result (read over SWD) still not TEST_COMPLETE after %ds "
+                    "(state=%d) -- board may be hung; physical check required" % (timeout, state)
+                )
+            time.sleep(poll_seconds)
 
 
 def stats_for(count, minimum, maximum, total):
@@ -434,7 +493,9 @@ def main():
         flash_firmware(fw_info["bin_path"], log)
         reset_target(log)
 
-        raw_result = collect_result(link, log)
+        raw_result, result_doc["result_transport"] = collect_result(
+            link, log, fw_info["bin_path"][:-4] + ".elf"
+        )
         benchmark = build_benchmark_doc(raw_result)
         result_doc["benchmark"] = benchmark
 

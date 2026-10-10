@@ -6,20 +6,28 @@ power -- something Phase 8 explicitly did not have (see quarry-hil's
 README, "Known limitation": a relay was ordered but never integrated).
 This module is that integration.
 
-The relay channel that switches VisionCB's board power is identified by
-`RELAY_ID` ("<board serial>_<channel>", the same "KEY=VAL" form the
-`usbrelay` CLI itself uses both to set and to report state) -- not a
-generic parameter, since only one relay channel is wired to VisionCB
-today.
+The relay channel that switches VisionCB's board power is identified as
+"<board serial>_<channel>" (the same "KEY=VAL" form the `usbrelay` CLI
+itself uses both to set and to report state) -- not a generic parameter,
+since only one relay channel is wired to VisionCB today.
+
+The board serial is NOT trusted to stay `RELAY_SERIAL`: these boards keep
+it in EEPROM, and on 2026-10-05 the relay spontaneously re-enumerated with
+it corrupted ("QAAMZ" -> "9oOMZ"), failing every run since. So the serial
+is resolved from usbrelay's own query on every call: `RELAY_SERIAL` if
+present, otherwise the one and only relay board on the host (logged as a
+warning). More than one board with none matching is an error -- guessing
+there could switch the wrong thing.
 """
 
 import re
 import subprocess
 import time
 
-RELAY_ID = "QAAMZ_1"
+RELAY_SERIAL = "QAAMZ"
+RELAY_CHANNEL = 1
 
-_STATE_LINE = re.compile(r"^%s=([01])\s*$" % re.escape(RELAY_ID), re.MULTILINE)
+_STATE_LINE = re.compile(r"^(.+)_([0-9]+)=([01])\s*$", re.MULTILINE)
 
 # Empirically, a target board needs its rails to fully discharge before a
 # reapplied power-on is a real, clean cold boot rather than a fast
@@ -53,35 +61,60 @@ def _run_usbrelay(args, timeout=10):
     return result.stdout
 
 
-def _query_state():
+def _query():
+    """Return ({relay_id: is_on}, query output) for every channel of every
+    relay board usbrelay can see."""
     out = _run_usbrelay([])
-    m = _STATE_LINE.search(out)
-    if not m:
+    states = {"%s_%s" % (m.group(1), m.group(2)): m.group(3) == "1" for m in _STATE_LINE.finditer(out)}
+    return states, out
+
+
+def _resolve_relay_id(log=None):
+    states, out = _query()
+    serials = sorted({rid.rsplit("_", 1)[0] for rid in states})
+    if RELAY_SERIAL in serials:
+        serial = RELAY_SERIAL
+    elif len(serials) == 1:
+        serial = serials[0]
+        if log is not None:
+            log.log(
+                "POWER",
+                "WARNING: relay board serial is %r, expected %r (EEPROM serial corrupted?) "
+                "-- using it since it is the only relay board present" % (serial, RELAY_SERIAL),
+            )
+    else:
         raise RelayError(
-            "could not find relay %r in usbrelay query output: %r" % (RELAY_ID, out)
+            "relay board %r not found and %d other board(s) present (%r), refusing to guess; "
+            "usbrelay query output: %r" % (RELAY_SERIAL, len(serials), serials, out)
         )
-    return m.group(1) == "1"
+    relay_id = "%s_%d" % (serial, RELAY_CHANNEL)
+    if relay_id not in states:
+        raise RelayError("relay %r not found in usbrelay query output: %r" % (relay_id, out))
+    return relay_id
 
 
-def _set_state(on, log=None):
+def _set_state(relay_id, on, log=None):
     desired = "1" if on else "0"
-    _run_usbrelay(["%s=%s" % (RELAY_ID, desired)])
-    actual = _query_state()
+    _run_usbrelay(["%s=%s" % (relay_id, desired)])
+    states, out = _query()
+    if relay_id not in states:
+        raise RelayError("relay %r disappeared from usbrelay query output: %r" % (relay_id, out))
+    actual = states[relay_id]
     if actual != on:
         raise RelayError(
             "usbrelay reported relay %r as %s after requesting %s"
-            % (RELAY_ID, "ON" if actual else "OFF", "ON" if on else "OFF")
+            % (relay_id, "ON" if actual else "OFF", "ON" if on else "OFF")
         )
     if log is not None:
-        log.log("POWER", "relay %s -> %s (confirmed)" % (RELAY_ID, "ON" if on else "OFF"))
+        log.log("POWER", "relay %s -> %s (confirmed)" % (relay_id, "ON" if on else "OFF"))
 
 
 def relay_on(log=None):
-    _set_state(True, log)
+    _set_state(_resolve_relay_id(log), True, log)
 
 
 def relay_off(log=None):
-    _set_state(False, log)
+    _set_state(_resolve_relay_id(log), False, log)
 
 
 def power_cycle(log=None):
@@ -90,9 +123,10 @@ def power_cycle(log=None):
     the same whether called at the start of a run or as mid-run recovery
     from an unresponsive board -- both cases want a real, clean power
     transition, not a no-op if the relay happened to already read ON."""
+    relay_id = _resolve_relay_id(log)
     if log is not None:
-        log.log("POWER", "power-cycling board via relay %s" % RELAY_ID)
-    relay_off(log)
+        log.log("POWER", "power-cycling board via relay %s" % relay_id)
+    _set_state(relay_id, False, log)
     time.sleep(POWER_OFF_SETTLE_SECONDS)
-    relay_on(log)
+    _set_state(relay_id, True, log)
     time.sleep(POWER_ON_SETTLE_SECONDS)

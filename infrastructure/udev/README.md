@@ -18,8 +18,8 @@ Grants the `plugdev` group control access to the VIA Labs VL812 USB2.0 hub (`idV
 
 Two independent things happen to sit behind different ports on this same physical hub, and both rely on this one rule:
 
-- **NUCLEO-F446RE's ST-LINK/V2.1** (port 3) — its own power *is* the board's power (no separate power rail), so `infrastructure/core/usb_hub_power.py` power-cycles this port at the start of every NUCLEO HIL run and as recovery.
-- **VisionCB-8M-STD's SEGGER J-Link probe** (port 1) — a separate USB device from the board itself (the board's power comes from a relay instead, see `power_relay.py`), which has been observed to drop off the USB bus entirely between runs. `run_visioncb_hil.py`'s `discover_device()` power-cycles this port as recovery if the probe isn't found.
+- **NUCLEO-F446RE's ST-LINK/V2.1** (port 3) — its own power *is* the board's power (no separate power rail). **Do not power-cycle this port**: doing so leaves the STM32 unreachable over SWD until the USB cable is physically replugged (reproduced 2026-09-29), so the NUCLEO runner never touches it.
+- **VisionCB-8M-STD's SEGGER J-Link probe** (port 1) — a separate USB device from the board itself (the board's power comes from a relay instead, see `power_relay.py`), which has been observed to drop off the USB bus entirely between runs. `run_visioncb_hil.py`'s `recover_probe()` power-cycles this port as recovery if the probe isn't found, or if the board stays silent (a wedged probe keeps its serial port but delivers no bytes).
 
 Both uses go through the same `infrastructure/core/usb_hub_power.py` module, parameterized by hub location + port rather than hardcoded to one board.
 

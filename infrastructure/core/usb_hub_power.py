@@ -11,15 +11,17 @@ relevant hub(s) was added on the HIL host; see
 infrastructure/udev/README.md.
 
 Parameterized by hub location + port (uhubctl's own addressing scheme,
-e.g. "3-11.2" / "1") rather than hardcoded to one board, since more than
-one board/probe on this host's topology needs this: NUCLEO-F446RE's
-on-board ST-LINK *is* the board's power (see run_nucleo_hil.py), and
+e.g. "3-11.2" / "1") rather than hardcoded to one board. Its user is
 VisionCB-8M-STD's SEGGER J-Link probe -- a separate USB device from the
 board itself, which gets its own power from a relay (power_relay.py) --
-has been observed to drop off the bus and require exactly this kind of
-power cycle to recover (the fix a human was doing by hand: unplug/replug
-the hub). Both happen to sit behind the same physical hub on this host,
-just different ports.
+which has been observed to drop off the bus, or stay enumerated but
+wedged, and require exactly this kind of power cycle to recover (the fix
+a human was doing by hand: unplug/replug the hub).
+
+Do NOT use this on NUCLEO-F446RE's ST-LINK port (3-11.2 port 3): cutting
+that port's power leaves the STM32 unreachable over SWD (core_id
+0xffffffff, even under reset) while the ST-LINK itself re-enumerates
+fine -- reproduced 2026-09-29; only a physical USB replug recovers it.
 
 Callers must not assume a device's /dev/ttyACM* (or similar) index
 survives a power_cycle() -- per serial_link.py's own rationale, that
