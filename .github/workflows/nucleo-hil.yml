@@ -124,7 +124,12 @@ jobs:
                     f"Validation failures: {b['validation_failures']}")
           if "error" in d:
               print(f"Error: {d['error']}")
+          if d.get("result_transport") == "swd":
+              print("**Warning:** UART was silent; result read over SWD instead (ST-LINK VCP bridge stuck -- replug the board's USB cable).")
           EOF
+          if python3 -c 'import json,sys; sys.exit(json.load(open(sys.argv[1])).get("result_transport") != "swd")' "${{ steps.rundir.outputs.run_dir }}result.json"; then
+            echo "::warning::NUCLEO-F446RE HIL: UART was silent, result read over SWD instead -- ST-LINK VCP bridge stuck; replug the board's USB cable to restore it"
+          fi
 
       - name: Upload HIL result artifacts
         if: always()

@@ -259,6 +259,7 @@ def recover_probe(log, reason, power_cycle_attempts=2):
 # ---------------------------------------------------------------------------
 
 LOGIN_PATTERN = re.compile(r"login:\s*$", re.MULTILINE)
+FATLOAD_DONE_PATTERN = re.compile(r"\d+ bytes read in \d+ ms")
 
 UBOOT_CATCH_TIMEOUT_SECONDS = 15
 
@@ -444,9 +445,22 @@ def uboot_resume_linux(link, log, timeout=40):
         link.send_line(cmd)
         time.sleep(settle)
 
+    # Wait for each load to finish rather than a fixed settle: the ~27MB
+    # Image read has been seen to take 2645ms, longer than send()'s 2.5s,
+    # and U-Boot drops characters typed while it's busy -- the dtb fatload
+    # got mangled, booti then failed with "Could not find a valid device tree".
+    def fatload(addr, name, load_timeout=20):
+        link.clear_buffer()
+        link.send_line("fatload mmc 0:1 %s %s" % (addr, name))
+        try:
+            link.wait_for(FATLOAD_DONE_PATTERN, timeout=load_timeout)
+        except SerialTimeout as e:
+            raise RecoveryRequired("fatload %s did not complete within %ds: %s" % (name, load_timeout, e))
+        time.sleep(0.5)  # let U-Boot print its prompt before the next command
+
     log.log("BOOT_LINUX", "resuming SD Linux boot (fatload Image/dtb, booti)")
-    send("fatload mmc 0:1 ${loadaddr} Image")
-    send("fatload mmc 0:1 ${fdt_addr} visionsom-8mm-cb-std.dtb")
+    fatload("${loadaddr}", "Image")
+    fatload("${fdt_addr}", "visionsom-8mm-cb-std.dtb")
     send("setenv bootargs console=${console} root=/dev/mmcblk0p2 rootwait rw")
     link.clear_buffer()
     link.send_line("booti ${loadaddr} - ${fdt_addr}")
