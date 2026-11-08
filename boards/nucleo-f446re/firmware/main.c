@@ -1,7 +1,7 @@
 /* Quarry Cortex-M4 hardware benchmark, NUCLEO-F446RE.
  *
  * Same workload, struct layout, and measurement design as the
- * VisionCB-8M-STD M4 firmware (visioncb-m4/quarry_bench/main.c): three
+ * VisionCB-8M-STD M4 firmware (boards/visioncb-8m-std/firmware/main.c): three
  * separately timed loops (encode-only, decode-only against a fixed valid
  * payload, and a combined round-trip), correctness validation always
  * performed outside the timed region. Host-API-free: no printf, no
@@ -17,8 +17,8 @@
 
 #include <stddef.h>
 
-#include "hil/telemetry.generated.h"
-#include "bench_result.h"
+/* QUARRY_BENCH_DEVICE_ID comes from infrastructure/build/board_specs.py. */
+#include "telemetry_workload.h"
 #include "dwt.h"
 #include "uart.h"
 
@@ -30,6 +30,15 @@ extern uint32_t __StackLimit;
 #define QUARRY_BENCH_OVERHEAD_SAMPLES 32U
 #define QUARRY_BENCH_STACK_PAINT_PATTERN 0xEEEEEEEEu
 
+/* Supplied by infrastructure/build/firmware_build.py; there are no defaults,
+ * so firmware cannot be built outside that provenance-recording path. */
+#ifndef QUARRY_BENCH_QUARRY_COMMIT_PREFIX
+#error "QUARRY_BENCH_QUARRY_COMMIT_PREFIX must be defined by the build"
+#endif
+#ifndef QUARRY_BENCH_BUILD_INPUT_DIGEST
+#error "QUARRY_BENCH_BUILD_INPUT_DIGEST must be defined by the build"
+#endif
+
 static volatile struct quarry_bench_result g_result;
 
 /* Static, not stack -- same rationale as VisionCB: fixed/static buffers,
@@ -39,72 +48,6 @@ static uint8_t g_roundtrip_buffer[QUARRY_BENCH_ENCODE_BUFFER_CAPACITY];
 static hil_telemetry_SensorSample_t g_sample;
 static hil_telemetry_SensorSample_decode_result_t g_decoded;
 static uint32_t g_overhead_samples[QUARRY_BENCH_OVERHEAD_SAMPLES];
-
-static void populate_sample(hil_telemetry_SensorSample_t *record) {
-    static const char device_id[] = "nucleo-hil-01";
-    static const uint8_t raw_payload[] = {0xDEU, 0xADU, 0xBEU, 0xEFU};
-    static const int16_t readings[4] = {-120, 0, 340, 4095};
-    uint32_t i;
-
-    hil_telemetry_SensorSample_init(record);
-
-    record->has_sequence = true;
-    record->sequence = 1001U;
-    record->has_timestamp_ms = true;
-    record->timestamp_ms = 1700000000123ULL;
-    record->has_temperature_c = true;
-    record->temperature_c = 24.5f;
-    record->has_battery_mv = true;
-    record->battery_mv = 3700U;
-    record->has_calibrated = true;
-    record->calibrated = true;
-    record->has_status = true;
-    record->status = HIL_TELEMETRY_STATUS_WARNING;
-
-    record->has_device_id = true;
-    record->device_id_length = 0U;
-    while (device_id[record->device_id_length] != '\0') {
-        record->device_id[record->device_id_length] = device_id[record->device_id_length];
-        ++record->device_id_length;
-    }
-
-    record->has_raw_payload = true;
-    record->raw_payload_length = (uint32_t)sizeof(raw_payload);
-    for (i = 0; i < record->raw_payload_length; ++i) {
-        record->raw_payload[i] = raw_payload[i];
-    }
-
-    record->has_readings = true;
-    record->readings_count = 4U;
-    for (i = 0; i < record->readings_count; ++i) {
-        record->readings[i] = readings[i];
-    }
-}
-
-static int validate_decoded(const hil_telemetry_SensorSample_t *original,
-                             const hil_telemetry_SensorSample_t *decoded) {
-    uint32_t i;
-
-    if (!decoded->has_sequence || decoded->sequence != original->sequence) return 0;
-    if (!decoded->has_timestamp_ms || decoded->timestamp_ms != original->timestamp_ms) return 0;
-    if (!decoded->has_temperature_c || decoded->temperature_c != original->temperature_c) return 0;
-    if (!decoded->has_battery_mv || decoded->battery_mv != original->battery_mv) return 0;
-    if (!decoded->has_calibrated || decoded->calibrated != original->calibrated) return 0;
-    if (!decoded->has_status || decoded->status != original->status) return 0;
-    if (!decoded->has_device_id || decoded->device_id_length != original->device_id_length) return 0;
-    for (i = 0; i < original->device_id_length; ++i) {
-        if (decoded->device_id[i] != original->device_id[i]) return 0;
-    }
-    if (!decoded->has_raw_payload || decoded->raw_payload_length != original->raw_payload_length) return 0;
-    for (i = 0; i < original->raw_payload_length; ++i) {
-        if (decoded->raw_payload[i] != original->raw_payload[i]) return 0;
-    }
-    if (!decoded->has_readings || decoded->readings_count != original->readings_count) return 0;
-    for (i = 0; i < original->readings_count; ++i) {
-        if (decoded->readings[i] != original->readings[i]) return 0;
-    }
-    return 1;
-}
 
 /* Insertion sort -- small, fixed N, no library dependency. */
 static void sort_u32(uint32_t *values, uint32_t count) {
@@ -143,6 +86,7 @@ static uint32_t stack_watermark_bytes(void) {
 static void run_benchmark(void) {
     uint32_t i;
     hil_telemetry_SensorSample_encode_result_t encode_result;
+    hil_telemetry_SensorSample_encoded_size_result_t encoded_size;
 
     g_result.magic = QUARRY_BENCH_MAGIC;
     g_result.version = QUARRY_BENCH_VERSION;
@@ -150,6 +94,10 @@ static void run_benchmark(void) {
     g_result.counter = 0U;
     g_result.validation_failures = 0U;
     g_result.stack_region_bytes = (uint32_t)((const uint8_t *)&__StackTop - (const uint8_t *)&__StackLimit);
+    g_result.record_sizeof = (uint32_t)sizeof(hil_telemetry_SensorSample_t);
+    g_result.presence_layout = QUARRY_BENCH_PRESENCE_LAYOUT;
+    g_result.quarry_commit_prefix = QUARRY_BENCH_QUARRY_COMMIT_PREFIX;
+    g_result.build_input_digest = QUARRY_BENCH_BUILD_INPUT_DIGEST;
     g_result.heap_bytes = 0U; /* No allocator linked; same confirmed-clean dependency profile as VisionCB. */
 
     g_result.dwt_supported = (uint32_t)quarry_bench_dwt_init();
@@ -160,7 +108,7 @@ static void run_benchmark(void) {
     }
     g_result.timing_overhead_cycles = measure_overhead();
 
-    populate_sample(&g_sample);
+    quarry_bench_populate_sample(&g_sample);
 
     /* Single-shot proof pass -- not timed. */
     encode_result = hil_telemetry_SensorSample_encode(&g_sample, g_encode_buffer,
@@ -173,11 +121,26 @@ static void run_benchmark(void) {
         g_result.state = QUARRY_BENCH_STATE_TEST_COMPLETE;
         return;
     }
+    /* _encoded_size() must agree with what encode() actually wrote. */
+    encoded_size = hil_telemetry_SensorSample_encoded_size(&g_sample);
+    if (encoded_size.status != QUARRY_C_STATUS_OK || encoded_size.size != encode_result.bytes_written) {
+        g_result.encode_stage = QUARRY_BENCH_STAGE_FAILED;
+        g_result.result_code = QUARRY_BENCH_RESULT_FAIL_ENCODE;
+        g_result.state = QUARRY_BENCH_STATE_TEST_COMPLETE;
+        return;
+    }
+    g_result.encoded_payload_fnv1a = quarry_bench_fnv1a32(g_encode_buffer, (uint32_t)encode_result.bytes_written);
+    g_result.encoded_payload_captured_bytes = (encode_result.bytes_written < QUARRY_BENCH_PAYLOAD_CAPTURE_BYTES)
+                                                  ? (uint32_t)encode_result.bytes_written
+                                                  : QUARRY_BENCH_PAYLOAD_CAPTURE_BYTES;
+    for (i = 0; i < g_result.encoded_payload_captured_bytes; ++i) {
+        g_result.encoded_payload[i] = g_encode_buffer[i];
+    }
     g_result.encode_stage = QUARRY_BENCH_STAGE_OK;
 
     g_decoded = hil_telemetry_SensorSample_decode(g_encode_buffer, encode_result.bytes_written);
     g_result.quarry_decode_status = (uint32_t)g_decoded.status;
-    if (g_decoded.status != QUARRY_C_STATUS_OK || !validate_decoded(&g_sample, &g_decoded.value)) {
+    if (g_decoded.status != QUARRY_C_STATUS_OK || !quarry_bench_validate_decoded(&g_sample, &g_decoded.value)) {
         g_result.decode_stage = QUARRY_BENCH_STAGE_FAILED;
         g_result.result_code = QUARRY_BENCH_RESULT_FAIL_DECODE;
         g_result.state = QUARRY_BENCH_STATE_TEST_COMPLETE;
@@ -223,7 +186,7 @@ static void run_benchmark(void) {
         end = quarry_bench_cycles();
         delta = end - start;
 
-        if (r.status != QUARRY_C_STATUS_OK || !validate_decoded(&g_sample, &r.value)) {
+        if (r.status != QUARRY_C_STATUS_OK || !quarry_bench_validate_decoded(&g_sample, &r.value)) {
             ++g_result.validation_failures;
         }
 
@@ -251,7 +214,7 @@ static void run_benchmark(void) {
         delta = end - start;
 
         if (er.status != QUARRY_C_STATUS_OK || dr.status != QUARRY_C_STATUS_OK ||
-            !validate_decoded(&g_sample, &dr.value)) {
+            !quarry_bench_validate_decoded(&g_sample, &dr.value)) {
             ++g_result.validation_failures;
         }
 
@@ -276,7 +239,7 @@ static void run_benchmark(void) {
 static const char MARKER_BEGIN[] = "===NUCLEO_HIL_RESULT_BEGIN===\r\n";
 static const char MARKER_END[] = "\r\n===NUCLEO_HIL_RESULT_END===\r\n";
 
-/* Transmits only the scalar prefix (magic .. heap_bytes), not the three
+/* Transmits only the prefix (magic .. encoded_payload), not the three
  * 500-entry raw per-iteration sample arrays that follow it in the struct.
  * Observed empirically (and expected on theoretical grounds -- no cache,
  * no branch predictor, no interrupts enabled): min==max==mean across all
@@ -285,7 +248,7 @@ static const char MARKER_END[] = "\r\n===NUCLEO_HIL_RESULT_END===\r\n";
  * unlike VisionCB's near-instant /dev/mem read, this is a polled UART
  * with no flow control: a real on-hardware run streaming the full ~6 KiB
  * struct (~1s at 115200 baud) was observed to occasionally truncate
- * mid-transfer. Sending only the ~124-byte prefix removes nearly all of
+ * mid-transfer. Sending only the ~400-byte prefix removes nearly all of
  * that transfer-reliability risk for no loss of the data this runner
  * actually uses. */
 static void report_result(void) {

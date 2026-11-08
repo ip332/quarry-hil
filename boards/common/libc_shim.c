@@ -5,8 +5,8 @@
  * Providing them locally avoids pulling in newlib, keeping this firmware
  * fully freestanding like the proven Phase-5 hil_smoke build
  * (-nostdlib -nostartfiles, no --specs=). Built with -fno-builtin (see
- * build.sh) so GCC won't try to lower these into recursive calls to
- * themselves. */
+ * TARGET_CFLAGS in infrastructure/build/firmware_build.py) so GCC won't
+ * try to lower these into recursive calls to themselves. */
 
 #include <stddef.h>
 

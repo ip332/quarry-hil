@@ -62,12 +62,12 @@ def test_schema_version_required():
 
 
 def test_schema_version_v1_only():
-    """Only schema version 1 is supported."""
+    """Unknown schema versions are rejected (1 and 2 are supported)."""
     data = minimal_valid_result()
-    data["schema_version"] = 2
+    data["schema_version"] = 3
     try:
         validate_hil_result(data)
-        assert False, "should raise ValueError for schema_version != 1"
+        assert False, "should raise ValueError for unknown schema_version"
     except ValueError as e:
         assert "unsupported schema_version" in str(e)
 
@@ -255,6 +255,68 @@ def test_result_code_enum():
     assert actual == expected, f"ResultCode mismatch: expected {expected}, got {actual}"
 
 
+def v2_pass_result():
+    data = minimal_valid_result()
+    data["schema_version"] = 2
+    data["presence_layout"] = "optimize-size"
+    data["hil"] = {"commit": "a" * 40, "dirty": False}
+    data["build"] = {
+        "presence_layout": "optimize-size",
+        "generation_options": ["--language", "c", "--c-optimize-size"],
+        "input_digest": "b" * 64,
+        "schema_compiler": "quarry-schema-compiler 0.1.266 (115e345)",
+        "schema_sha256": "c" * 64,
+        "generated_files": {"hil/telemetry.generated.h": "d" * 64},
+        "footprint": {"elf": {"text": 1, "data": 0, "bss": 0}, "objects": {}},
+    }
+    stats = {"min": 1, "max": 1, "mean": 1.0, "sum": 500}
+    data["benchmark"] = {
+        "platform": "NUCLEO-F446RE", "cpu": "Cortex-M4F", "workload": "telemetry", "magic": "0x51424e31",
+        "version": 2, "state": 2, "result_code": 1, "counter": 0, "dwt_supported": True,
+        "timing_overhead_cycles": 1, "iterations": 500, "encoded_bytes": 2, "validation_failures": 0,
+        "record_sizeof": 80, "presence_layout": 1, "encoded_payload_hex": "abcd",
+        "encode_cycles": stats, "decode_cycles": stats, "roundtrip_cycles": stats,
+        "stack_watermark_bytes": 100, "heap_bytes": 0,
+    }
+    return data
+
+
+def test_v2_pass_result_valid():
+    validate_hil_result(v2_pass_result())
+
+
+def test_v2_requires_hil_provenance():
+    data = v2_pass_result()
+    del data["hil"]
+    try:
+        validate_hil_result(data)
+        assert False, "v2 PASS without hil provenance must be rejected"
+    except ValueError as e:
+        assert "hil" in str(e)
+
+
+def test_v2_generation_options_must_match_layout():
+    data = v2_pass_result()
+    data["build"]["generation_options"] = ["--language", "c"]
+    try:
+        validate_hil_result(data)
+        assert False, "layout/options mismatch must be rejected"
+    except ValueError as e:
+        assert "generation_options" in str(e)
+
+
+def test_v2_failure_needs_domain_only():
+    data = {"schema_version": 2, "result": "INFRASTRUCTURE_ERROR", "run_dir": "/r", "presence_layout": "default",
+            "failure_domain": "infrastructure", "error": "host compiler build failed"}
+    validate_hil_result(data)
+    del data["failure_domain"]
+    try:
+        validate_hil_result(data)
+        assert False, "non-PASS v2 result without failure_domain must be rejected"
+    except ValueError as e:
+        assert "failure_domain" in str(e)
+
+
 # For pytest discovery when run as: python3 -m pytest
 if __name__ == "__main__":
     # Run manually for quick validation
@@ -272,4 +334,8 @@ if __name__ == "__main__":
     test_quarry_all_required_fields()
     test_target_all_required_fields()
     test_result_code_enum()
+    test_v2_pass_result_valid()
+    test_v2_requires_hil_provenance()
+    test_v2_generation_options_must_match_layout()
+    test_v2_failure_needs_domain_only()
     print("✓ All tests passed")
