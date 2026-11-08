@@ -1,0 +1,106 @@
+$ /home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0/tools/quarry-schema-compiler --language c --output-directory /home/igor/work/quarry-hil/build/visioncb-8m-std/default/generated /home/igor/work/quarry-hil/boards/common/telemetry.brd
+$ /home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0/tools/quarry-schema-compiler --language c --output-directory /home/igor/work/quarry-hil/build/visioncb-8m-std/default/host-check/default/generated /home/igor/work/quarry-hil/boards/common/telemetry.brd
+$ cc -std=c11 -Wall -Wextra -Werror -O1 -DQUARRY_BENCH_DEVICE_ID="m4-hil-01" -I /home/igor/work/quarry-hil/boards/common -I /home/igor/work/quarry-hil/build/visioncb-8m-std/default/host-check/default/generated -I /home/igor/.cache/visioncb-hil/quarry-ci-checkout/include -I /home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0/generated -o /home/igor/work/quarry-hil/build/visioncb-8m-std/default/host-check/default/layout_equivalence /home/igor/work/quarry-hil/infrastructure/build/layout_equivalence.c /home/igor/.cache/visioncb-hil/quarry-ci-checkout/runtime_c/typed_record.c
+$ /home/igor/work/quarry-hil/build/visioncb-8m-std/default/host-check/default/layout_equivalence
+{"presence_layout": 0, "record_sizeof": 96, "encoded_bytes": 84, "fnv1a": "305fca0b", "payload_hex": "02000010000000010000002e00000054ff01000003e90000018bcfe5687b41c400000e7401010000003e0000000900000047000000040000004b000000096d342d68696c2d3031deadbeef04ff88000001540fff"}
+$ /home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0/tools/quarry-schema-compiler --language c --c-optimize-size --output-directory /home/igor/work/quarry-hil/build/visioncb-8m-std/default/host-check/optimize-size/generated /home/igor/work/quarry-hil/boards/common/telemetry.brd
+$ cc -std=c11 -Wall -Wextra -Werror -O1 -DQUARRY_BENCH_DEVICE_ID="m4-hil-01" -DQUARRY_BENCH_PRESENCE_PACKED_LAYOUT=1 -I /home/igor/work/quarry-hil/boards/common -I /home/igor/work/quarry-hil/build/visioncb-8m-std/default/host-check/optimize-size/generated -I /home/igor/.cache/visioncb-hil/quarry-ci-checkout/include -I /home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0/generated -o /home/igor/work/quarry-hil/build/visioncb-8m-std/default/host-check/optimize-size/layout_equivalence /home/igor/work/quarry-hil/infrastructure/build/layout_equivalence.c /home/igor/.cache/visioncb-hil/quarry-ci-checkout/runtime_c/typed_record.c
+$ /home/igor/work/quarry-hil/build/visioncb-8m-std/default/host-check/optimize-size/layout_equivalence
+{"presence_layout": 1, "record_sizeof": 80, "encoded_bytes": 84, "fnv1a": "305fca0b", "payload_hex": "02000010000000010000002e00000054ff01000003e90000018bcfe5687b41c400000e7401010000003e0000000900000047000000040000004b000000096d342d68696c2d3031deadbeef04ff88000001540fff"}
+$ arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -ffreestanding -fno-builtin -nostdlib -nostartfiles -Wall -Wextra -Os -g -std=c11 -DQUARRY_BENCH_DEVICE_ID="m4-hil-01" -DQUARRY_BENCH_QUARRY_COMMIT_PREFIX=0x115e3452u -DQUARRY_BENCH_BUILD_INPUT_DIGEST=0xdc07739au -I /home/igor/work/quarry-hil/build/visioncb-8m-std/default/src -I /home/igor/work/quarry-hil/build/visioncb-8m-std/default/generated -I /home/igor/.cache/visioncb-hil/quarry-ci-checkout/include -I /home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0/generated -c /home/igor/work/quarry-hil/build/visioncb-8m-std/default/src/startup.c -o /home/igor/work/quarry-hil/build/visioncb-8m-std/default/obj/startup.o
+$ arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -ffreestanding -fno-builtin -nostdlib -nostartfiles -Wall -Wextra -Os -g -std=c11 -DQUARRY_BENCH_DEVICE_ID="m4-hil-01" -DQUARRY_BENCH_QUARRY_COMMIT_PREFIX=0x115e3452u -DQUARRY_BENCH_BUILD_INPUT_DIGEST=0xdc07739au -I /home/igor/work/quarry-hil/build/visioncb-8m-std/default/src -I /home/igor/work/quarry-hil/build/visioncb-8m-std/default/generated -I /home/igor/.cache/visioncb-hil/quarry-ci-checkout/include -I /home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0/generated -c /home/igor/work/quarry-hil/build/visioncb-8m-std/default/src/libc_shim.c -o /home/igor/work/quarry-hil/build/visioncb-8m-std/default/obj/libc_shim.o
+$ arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -ffreestanding -fno-builtin -nostdlib -nostartfiles -Wall -Wextra -Os -g -std=c11 -DQUARRY_BENCH_DEVICE_ID="m4-hil-01" -DQUARRY_BENCH_QUARRY_COMMIT_PREFIX=0x115e3452u -DQUARRY_BENCH_BUILD_INPUT_DIGEST=0xdc07739au -I /home/igor/work/quarry-hil/build/visioncb-8m-std/default/src -I /home/igor/work/quarry-hil/build/visioncb-8m-std/default/generated -I /home/igor/.cache/visioncb-hil/quarry-ci-checkout/include -I /home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0/generated -c /home/igor/work/quarry-hil/build/visioncb-8m-std/default/src/main.c -o /home/igor/work/quarry-hil/build/visioncb-8m-std/default/obj/main.o
+$ arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -ffreestanding -fno-builtin -nostdlib -nostartfiles -Wall -Wextra -Os -g -std=c11 -DQUARRY_BENCH_DEVICE_ID="m4-hil-01" -DQUARRY_BENCH_QUARRY_COMMIT_PREFIX=0x115e3452u -DQUARRY_BENCH_BUILD_INPUT_DIGEST=0xdc07739au -I /home/igor/work/quarry-hil/build/visioncb-8m-std/default/src -I /home/igor/work/quarry-hil/build/visioncb-8m-std/default/generated -I /home/igor/.cache/visioncb-hil/quarry-ci-checkout/include -I /home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0/generated -c /home/igor/work/quarry-hil/build/visioncb-8m-std/default/generated/hil/telemetry.generated.c -o /home/igor/work/quarry-hil/build/visioncb-8m-std/default/obj/telemetry.generated.o
+$ arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -ffreestanding -fno-builtin -nostdlib -nostartfiles -Wall -Wextra -Os -g -std=c11 -DQUARRY_BENCH_DEVICE_ID="m4-hil-01" -DQUARRY_BENCH_QUARRY_COMMIT_PREFIX=0x115e3452u -DQUARRY_BENCH_BUILD_INPUT_DIGEST=0xdc07739au -I /home/igor/work/quarry-hil/build/visioncb-8m-std/default/src -I /home/igor/work/quarry-hil/build/visioncb-8m-std/default/generated -I /home/igor/.cache/visioncb-hil/quarry-ci-checkout/include -I /home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0/generated -c /home/igor/.cache/visioncb-hil/quarry-ci-checkout/runtime_c/typed_record.c -o /home/igor/work/quarry-hil/build/visioncb-8m-std/default/obj/typed_record.o
+$ arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -ffreestanding -fno-builtin -nostdlib -nostartfiles -Wall -Wextra -Os -g -std=c11 -T /home/igor/work/quarry-hil/build/visioncb-8m-std/default/src/link.ld -Wl,-Map=/home/igor/work/quarry-hil/build/visioncb-8m-std/default/quarry_bench.map -Wl,--gc-sections -nostdlib -nostartfiles -o /home/igor/work/quarry-hil/build/visioncb-8m-std/default/quarry_bench.elf /home/igor/work/quarry-hil/build/visioncb-8m-std/default/obj/startup.o /home/igor/work/quarry-hil/build/visioncb-8m-std/default/obj/libc_shim.o /home/igor/work/quarry-hil/build/visioncb-8m-std/default/obj/main.o /home/igor/work/quarry-hil/build/visioncb-8m-std/default/obj/telemetry.generated.o /home/igor/work/quarry-hil/build/visioncb-8m-std/default/obj/typed_record.o
+$ arm-none-eabi-objcopy -O binary /home/igor/work/quarry-hil/build/visioncb-8m-std/default/quarry_bench.elf /home/igor/work/quarry-hil/build/visioncb-8m-std/default/quarry_bench-default.bin
+$ arm-none-eabi-nm /home/igor/work/quarry-hil/build/visioncb-8m-std/default/quarry_bench.elf
+20002340 B __bss_end
+20002000 B __bss_start
+1ffe0240 W BusFault_Handler
+20002000 D __data_end
+1ffe1a48 A __data_load_start
+20002000 D __data_start
+1ffe0240 W DebugMon_Handler
+1ffe0240 T Default_Handler
+1ffe16d4 t device_id.2
+200021d8 b g_decoded
+200020d8 b g_encode_buffer
+20002058 b g_overhead_samples
+20000000 B g_result
+20002240 b g_roundtrip_buffer
+20002000 b g_sample
+1ffe0000 R g_vector_table
+1ffe0240 W HardFault_Handler
+1ffe194c t hil_telemetry_SensorSample_brf_v2_fields
+1ffe1938 t hil_telemetry_SensorSample_brf_v2_layout
+1ffe0434 t hil_telemetry_SensorSample_decode
+1ffe0474 t hil_telemetry_SensorSample_encode.constprop.0
+1ffe0316 t hil_telemetry_SensorSample_field_5_enum_load
+1ffe0300 t hil_telemetry_SensorSample_field_5_enum_store
+1ffe1920 t hil_telemetry_SensorSample_field_5_enum_values
+1ffe16e0 t hil_telemetry_SensorSample_members
+1ffe16c8 t hil_telemetry_SensorSample_type
+1ffe0a8c t load_count
+1ffe04a8 T main
+1ffe0d40 t measure_element.constprop.0
+1ffe0d9c t measure_field.constprop.0
+1ffe0cb8 t measure_record.constprop.0
+1ffe0aa2 t member_present
+1ffe02cc T memcpy
+1ffe0240 W MemManage_Handler
+1ffe02e2 T memset
+1ffe0240 W NMI_Handler
+1ffe0240 W PendSV_Handler
+1ffe0a6a t prefixed_element
+1ffe02f4 t quarry_bench_cycles
+1ffe0330 t quarry_bench_validate_decoded.constprop.0
+1ffe0a64 t quarry_c_brf_v2_read_u32
+1ffe09c2 t quarry_c_is_valid_utf8
+1ffe0954 t quarry_c_read_u16
+1ffe098c t quarry_c_read_u32
+1ffe0c56 t quarry_c_read_u64.constprop.0
+1ffe0938 t quarry_c_read_u8
+1ffe0be6 t quarry_c_read_varuint.constprop.0
+1ffe1660 T quarry_c_typed_decode
+1ffe15f6 T quarry_c_typed_encode
+1ffe15c6 T quarry_c_typed_encoded_size
+1ffe08ea t quarry_c_write_u16
+1ffe0904 t quarry_c_write_u32
+1ffe091e t quarry_c_write_u64
+1ffe08d0 t quarry_c_write_u8
+1ffe0c80 t quarry_c_write_varuint.isra.0
+1ffe11b8 t read_element
+1ffe0e40 t read_record
+1ffe0242 T Reset_Handler
+1ffe0af6 t scalar_encode
+20001908 B __shared_end
+20000000 B __shared_start
+20002340 B __StackLimit
+20003340 B __StackTop
+1ffe0240 W SVC_Handler
+1ffe0240 W SysTick_Handler
+1ffe0240 W UsageFault_Handler
+1ffe158e t write_element
+1ffe1414 t write_record
+$ arm-none-eabi-readelf -h /home/igor/work/quarry-hil/build/visioncb-8m-std/default/quarry_bench.elf
+ELF Header:
+  Magic:   7f 45 4c 46 01 01 01 00 00 00 00 00 00 00 00 00 
+  Class:                             ELF32
+  Data:                              2's complement, little endian
+  Version:                           1 (current)
+  OS/ABI:                            UNIX - System V
+  ABI Version:                       0
+  Type:                              EXEC (Executable file)
+  Machine:                           ARM
+  Version:                           0x1
+  Entry point address:               0x1ffe0243
+  Start of program headers:          52 (bytes into file)
+  Start of section headers:          134564 (bytes into file)
+  Flags:                             0x5000400, Version5 EABI, hard-float ABI
+  Size of this header:               52 (bytes)
+  Size of program headers:           32 (bytes)
+  Number of program headers:         4
+  Size of section headers:           40 (bytes)
+  Number of section headers:         19
+  Section header string table index: 18

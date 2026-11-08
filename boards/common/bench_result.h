@@ -17,7 +17,16 @@
  * trusting on-device arithmetic it can't independently verify). */
 
 #define QUARRY_BENCH_MAGIC   0x51424e31u /* "QBN1" */
-#define QUARRY_BENCH_VERSION 1u
+/* Version 2 appends the v2 provenance/payload block between heap_bytes and
+ * the sample arrays (see below). The version-1 prefix is unchanged. */
+#define QUARRY_BENCH_VERSION 2u
+
+/* presence_layout values -- which generated C record layout was compiled. */
+#define QUARRY_BENCH_PRESENCE_DEFAULT  0u /* one bool has_<field> member per scalar/enum */
+#define QUARRY_BENCH_PRESENCE_PACKED   1u /* --c-optimize-size: quarry_presence_bits[] bitmap */
+
+/* Capacity of the captured wire payload; equals the encode buffer size. */
+#define QUARRY_BENCH_PAYLOAD_CAPTURE_BYTES 256u
 
 #define QUARRY_BENCH_STATE_INIT          0u
 #define QUARRY_BENCH_STATE_TEST_STARTED  1u
@@ -82,6 +91,15 @@ struct quarry_bench_result {
     uint32_t stack_watermark_bytes; /* observed peak, via stack-painting */
     uint32_t stack_region_bytes;    /* configured budget, for context */
     uint32_t heap_bytes;            /* always 0 -- no allocator linked, no malloc call exists */
+
+    /* Version 2 additions. */
+    uint32_t record_sizeof;          /* sizeof(hil_telemetry_SensorSample_t) as compiled for this target */
+    uint32_t presence_layout;        /* QUARRY_BENCH_PRESENCE_* */
+    uint32_t quarry_commit_prefix;   /* first 8 hex digits of the Quarry commit this was built from */
+    uint32_t build_input_digest;     /* first 8 hex digits of the host-side build manifest's input digest */
+    uint32_t encoded_payload_fnv1a;  /* FNV-1a 32 over the single-shot encode output */
+    uint32_t encoded_payload_captured_bytes; /* min(encoded_bytes, QUARRY_BENCH_PAYLOAD_CAPTURE_BYTES) */
+    uint8_t encoded_payload[QUARRY_BENCH_PAYLOAD_CAPTURE_BYTES]; /* single-shot encode output, verbatim */
 
     /* Raw per-iteration samples, `iteration_count` of each valid. */
     uint32_t encode_cycles_samples[QUARRY_BENCH_MAX_SAMPLES];

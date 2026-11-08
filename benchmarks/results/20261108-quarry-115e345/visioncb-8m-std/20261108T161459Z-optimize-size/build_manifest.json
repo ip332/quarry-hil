@@ -1,0 +1,201 @@
+{
+  "board": "visioncb-8m-std",
+  "compile_warnings": [],
+  "firmware": {
+    "bin_bytes": 6704,
+    "bin_name": "quarry_bench-optimize-size.bin",
+    "bss_bytes": 11304,
+    "compiler": "arm-none-eabi-gcc (15:10.3-2021.07-4) 10.3.1 20210621 (release)",
+    "data_bytes": 0,
+    "elf_sha256": "f14d155a76741c8fd25a93edf27c296ac2dac358d7852daa25dd157651846798",
+    "entry_point": "0x1ffe0243",
+    "flags": "-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -ffreestanding -fno-builtin -nostdlib -nostartfiles -Wall -Wextra -Os -g -std=c11",
+    "sha256": "99cf278362cb78a6cf8804fa8d8655683e8f6efe55cd5fd5efc45a5428050b33",
+    "stack_top": "0x20003320",
+    "text_bytes": 6704
+  },
+  "footprint": {
+    "elf": {
+      "bss": 11304,
+      "data": 0,
+      "text": 6704
+    },
+    "objects": {
+      "libc_shim": {
+        "bss": 0,
+        "data": 0,
+        "text": 40
+      },
+      "main": {
+        "bss": 800,
+        "data": 6408,
+        "text": 2368
+      },
+      "startup": {
+        "bss": 0,
+        "data": 0,
+        "text": 716
+      },
+      "telemetry.generated": {
+        "bss": 0,
+        "data": 0,
+        "text": 0
+      },
+      "typed_record": {
+        "bss": 0,
+        "data": 0,
+        "text": 3572
+      }
+    }
+  },
+  "full_cflags": [
+    "-mcpu=cortex-m4",
+    "-mthumb",
+    "-mfpu=fpv4-sp-d16",
+    "-mfloat-abi=hard",
+    "-ffreestanding",
+    "-fno-builtin",
+    "-nostdlib",
+    "-nostartfiles",
+    "-Wall",
+    "-Wextra",
+    "-Os",
+    "-g",
+    "-std=c11",
+    "-DQUARRY_BENCH_DEVICE_ID=\"m4-hil-01\"",
+    "-DQUARRY_BENCH_QUARRY_COMMIT_PREFIX=0x115e3452u",
+    "-DQUARRY_BENCH_BUILD_INPUT_DIGEST=0xa16dd4e7u",
+    "-DQUARRY_BENCH_PRESENCE_PACKED_LAYOUT=1",
+    "-I",
+    "/home/igor/work/quarry-hil/build/visioncb-8m-std/optimize-size/src",
+    "-I",
+    "/home/igor/work/quarry-hil/build/visioncb-8m-std/optimize-size/generated",
+    "-I",
+    "/home/igor/.cache/visioncb-hil/quarry-ci-checkout/include",
+    "-I",
+    "/home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0/generated"
+  ],
+  "hil": {
+    "branch": "feature/quarry-main-typed-codec-bench",
+    "commit": "67438ba98dddc046b3e5acfbde52e67166c64d68",
+    "describe": "67438ba",
+    "dirty": false,
+    "path": "/home/igor/work/quarry-hil",
+    "remote": "https://github.com/ip332/quarry-hil.git",
+    "status_short": "",
+    "tree": "b7ae7bc4e25c7ef35d3ca2c384dae0b3d66a86eb",
+    "untracked": [
+      "boards/visioncb-8m-std/.visioncb-8m-std.lock"
+    ]
+  },
+  "host_layout_gate": {
+    "default": {
+      "encoded_bytes": 84,
+      "fnv1a": "305fca0b",
+      "payload_hex": "02000010000000010000002e00000054ff01000003e90000018bcfe5687b41c400000e7401010000003e0000000900000047000000040000004b000000096d342d68696c2d3031deadbeef04ff88000001540fff",
+      "presence_layout": 0,
+      "record_sizeof": 96
+    },
+    "optimize-size": {
+      "encoded_bytes": 84,
+      "fnv1a": "305fca0b",
+      "payload_hex": "02000010000000010000002e00000054ff01000003e90000018bcfe5687b41c400000e7401010000003e0000000900000047000000040000004b000000096d342d68696c2d3031deadbeef04ff88000001540fff",
+      "presence_layout": 1,
+      "record_sizeof": 80
+    }
+  },
+  "input_digest": "a16dd4e795868a3e98a6ffd99a996349cd8e7239afa14daf31ee0eb89f9467c2",
+  "inputs": {
+    "board": "visioncb-8m-std",
+    "board_defines": [],
+    "compiler": "arm-none-eabi-gcc (15:10.3-2021.07-4) 10.3.1 20210621 (release)",
+    "device_id": "m4-hil-01",
+    "generated_files": {
+      "hil/telemetry.generated.c": "15e12dcdea8761bd6ca711d4ad91fed9b6224927fd63d27382dd643cb6faf192",
+      "hil/telemetry.generated.h": "d4a85304520aaf542cfebb6516214c2399f03f6ca924e84b53c5012afa689701"
+    },
+    "generation_options": [
+      "--language",
+      "c",
+      "--c-optimize-size"
+    ],
+    "harness_sources": {
+      "boards/common/bench_result.h": "0271a4884812c66b84e9871c8f0494889649e2bdd2d618921da352ec4fedb50d",
+      "boards/common/dwt.h": "f5e30523bfcd4be6e901eaced7466561374b52b9f29c5b0991a9e515961be5d8",
+      "boards/common/libc_shim.c": "d9eb733210b26a14715b31187773a39796a96e35a5d8d25c254e12aa22b43bbf",
+      "boards/common/telemetry.brd": "3c4e394cf95a5e5c019ea80650640c462493f35ed6aeda0f63831b4a838b4f46",
+      "boards/common/telemetry_workload.h": "e75aa61f7d22e9fe5466f697b40f1242becd46d90db6f5c45b505464fcb9865f",
+      "boards/visioncb-8m-std/firmware/link.ld": "ab7d3f3acc9dd24e410c6bcf38015059dedfa47ac41309997f40be1de39ebbe9",
+      "boards/visioncb-8m-std/firmware/main.c": "784f69a69af00ff15e37f4d866192bfa5872e5bacc97832e057fb8034926068f",
+      "boards/visioncb-8m-std/firmware/startup.c": "83dea24af06cbf3910e887f9d778ceb3a8ebed6f128b87420865ededbf78ba64"
+    },
+    "presence_layout": "optimize-size",
+    "quarry_commit": "115e345223d31e3ea94b842c2173f740223fd4c0",
+    "quarry_dirty_digest": null,
+    "quarry_runtime_inputs": {
+      "include/quarry/runtime_c/binary_record.h": "0f0e11a01db6a494b563db1a6eda42d762ce23090015792a221c08ca8005f875",
+      "include/quarry/runtime_c/binary_record_v2.h": "5d5133fbe69f323b0fc52033209e2b305874c608a0201ba5766294bc966dec42",
+      "include/quarry/runtime_c/generic_brf.h": "b9a3ce46ec3e52cc5fbb50c6fb118720abc489b218e6be0ee00e11bb7abf7ba0",
+      "include/quarry/runtime_c/generic_brf_encoding.h": "0fddf71796356ed71041fd6bd105a43f1c6852ed2abe6f16c7f1ac12fc32a4d6",
+      "include/quarry/runtime_c/typed_record.h": "e3fb8982652119d3e2c79ecaf1ae546207a577ba7a7b6eb838e8d856addb924b",
+      "runtime_c/typed_record.c": "580d0d7c6c127a2a5fb2b037889f3568990b144e0a7cdc92114ec364eccc15e3"
+    },
+    "schema_compiler_sha256": "f447c9ca1f145dc76ce7eb6ce49a72ec731ed2b3089e81477cc32e741037ba5a",
+    "target_cflags": [
+      "-mcpu=cortex-m4",
+      "-mthumb",
+      "-mfpu=fpv4-sp-d16",
+      "-mfloat-abi=hard",
+      "-ffreestanding",
+      "-fno-builtin",
+      "-nostdlib",
+      "-nostartfiles",
+      "-Wall",
+      "-Wextra",
+      "-Os",
+      "-g",
+      "-std=c11"
+    ],
+    "target_ldflags": [
+      "-Wl,--gc-sections",
+      "-nostdlib",
+      "-nostartfiles"
+    ],
+    "version_header_sha256": "0eadd5405898fa4ef5d395da8fb4c7e67d2719ab9fa7468ccd7f3a93505c7e71"
+  },
+  "manifest_version": 1,
+  "presence_layout": "optimize-size",
+  "quarry": {
+    "branch": "(detached)",
+    "commit": "115e345223d31e3ea94b842c2173f740223fd4c0",
+    "describe": "v0.1.30-rc.3-2-g115e345",
+    "dirty": false,
+    "path": "/home/igor/.cache/visioncb-hil/quarry-ci-checkout",
+    "remote": "https://github.com/ip332/quarry.git",
+    "requested_ref": "main",
+    "selection": "ci-checkout",
+    "status_short": "",
+    "tree": "3bb4ce0ebe0318826c69f2d6c4b53ce1fa2a6ab0",
+    "untracked": []
+  },
+  "quarry_runtime_source": "/home/igor/.cache/visioncb-hil/quarry-ci-checkout/runtime_c/typed_record.c",
+  "schema_compiler": {
+    "build_dir": "/home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0",
+    "c_generated_code_api_version": 5,
+    "cmake_args": [
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DQUARRY_WARNINGS_AS_ERRORS=ON",
+      "-DQUARRY_ENABLE_CLANG_TIDY=OFF",
+      "-DQUARRY_LIBYAML_INCLUDE_DIR=/home/igor/.cache/quarry-hil/hostdeps/prefix/usr/include",
+      "-DQUARRY_LIBYAML_LIBRARY=/usr/lib/x86_64-linux-gnu/libyaml-0.so.2",
+      "-Dabsl_DIR=/home/igor/.cache/quarry-hil/hostdeps/prefix/usr/lib/x86_64-linux-gnu/cmake/absl"
+    ],
+    "reused_cached_build": true,
+    "sha256": "f447c9ca1f145dc76ce7eb6ce49a72ec731ed2b3089e81477cc32e741037ba5a",
+    "version": "quarry-schema-compiler 0.1.266 (115e345)",
+    "version_header": "/home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0/generated/quarry/runtime_c/version.h",
+    "version_header_dir": "/home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0/generated",
+    "version_header_sha256": "0eadd5405898fa4ef5d395da8fb4c7e67d2719ab9fa7468ccd7f3a93505c7e71"
+  },
+  "schema_compiler_path": "/home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0/tools/quarry-schema-compiler"
+}

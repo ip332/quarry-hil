@@ -25,7 +25,8 @@ jobs:
           python3 -m py_compile boards/nucleo-f446re/run_nucleo_hil.py
           python3 -m py_compile infrastructure/core/serial_link.py
           python3 -m py_compile infrastructure/schema/result_schema.py
-          python3 -m py_compile tests/test_schema.py
+          python3 -m py_compile tests/test_schema.py tests/test_result_checks.py
+          python3 -m py_compile infrastructure/build/*.py tools/*.py
       - name: "Check for common import errors"
         run: |
           python3 -c "import sys; sys.path.insert(0, 'infrastructure/core'); from serial_link import SerialLink; print('✓ serial_link');"
@@ -41,6 +42,8 @@ jobs:
           python-version: '3.11'
       - name: "Run schema validation tests"
         run: python3 tests/test_schema.py
+      - name: "Run result-check / wire-layout tests"
+        run: python3 tests/test_result_checks.py
       - name: "Run pytest if available"
         run: |
           python3 -m pip install pytest --quiet 2>/dev/null || true
@@ -122,6 +125,35 @@ jobs:
               print(f"✗ Schema validation failed: {e}")
               sys.exit(1)
           EOF
+
+  # Hardware-free build of every board firmware variant against current
+  # Quarry main: host schema compiler, fresh bindings for both presence
+  # layouts, firmware link, and the host layout-equivalence gate. It is
+  # informational and deliberately left out of ci-complete: Quarry main can
+  # change its API independently of this repository, and that must not block
+  # unrelated quarry-hil PRs. A failure here means the harness needs updating
+  # for the new Quarry API before the next nightly HIL run.
+  firmware-build:
+    name: "Firmware Build (Quarry main, both layouts)"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install toolchains"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake build-essential \
+            libabsl-dev libprotobuf-dev libyaml-dev protobuf-compiler gcc-arm-none-eabi libnewlib-arm-none-eabi
+      - name: "Clone Quarry main"
+        run: git clone --quiet https://github.com/ip332/quarry.git "$RUNNER_TEMP/quarry"
+      - name: "Build all board variants"
+        run: python3 tools/build_firmware.py --board all --presence-layout all --quarry-dir "$RUNNER_TEMP/quarry"
+      - name: "Upload build manifests"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-build-manifests-${{ github.run_id }}
+          path: build/*/*/build_manifest.json
+          if-no-files-found: warn
 
   # All status-check names that should be required in main branch ruleset
   ci-complete:

@@ -5,7 +5,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-build/
+/build/
 develop-eggs/
 dist/
 downloads/
@@ -44,3 +44,6 @@ generated/
 *.elf
 *.map
 *.o
+
+# Archived benchmark evidence is committed on purpose, logs included.
+!/benchmarks/results/**/*.log

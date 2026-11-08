@@ -8,9 +8,11 @@ relay-controlled board power (see power_relay.py):
     resume Linux -> storage safety -> collect DTCM result -> validate -> JSON
 
 Everything board-specific (serial identity, U-Boot commands, SD/eMMC
-device paths, the DTCM physical alias) lives in this file and its
-sibling modules under visioncb-m4/hil_runner/ -- Quarry itself is never
-made aware of any of this.
+device paths, the DTCM physical alias) lives in this file, and the M4
+harness itself in this board's firmware/ directory (plus boards/common/)
+-- Quarry itself is never made aware of any of this. The firmware is
+rebuilt from the selected Quarry revision on every run; see
+infrastructure/build/firmware_build.py.
 
 Exit codes (stable, documented contract for future CI use):
     0  PASS
@@ -34,9 +36,20 @@ import time
 # Import serial_link from infrastructure/core (two levels up from this file)
 _hil_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(_hil_root, "infrastructure", "core"))
+sys.path.insert(0, os.path.join(_hil_root, "infrastructure", "build"))
 from serial_link import SerialLink, SerialTimeout, resolve_segger_jlink_device  # noqa: E402
+import board_specs  # noqa: E402
+import firmware_build  # noqa: E402
 import power_relay  # noqa: E402
+import quarry_source  # noqa: E402
+import result_checks  # noqa: E402
+import run_setup  # noqa: E402
 import usb_hub_power  # noqa: E402
+
+FIRMWARE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "firmware")
+READER_SOURCE = os.path.join(FIRMWARE_DIR, "read_bench_result.c")
+
+FIRMWARE_SPEC = board_specs.BOARDS["visioncb-8m-std"]
 
 SEGGER_SERIAL_NUMBER = "000900003460"
 BAUD = 115200
@@ -81,6 +94,13 @@ class RecoveryRequired(RunnerError):
     exit_code = 3
 
 
+class BindingMismatch(InfrastructureError):
+    """The board is not running the firmware this run built."""
+
+
+RESULT_CODES = {1: "TEST_FAILURE", 2: "INFRASTRUCTURE_ERROR", 3: "RECOVERY_REQUIRED"}
+
+
 class Logger:
     def __init__(self, run_dir):
         self.run_dir = run_dir
@@ -117,81 +137,20 @@ def sha256_file(path):
 
 
 # ---------------------------------------------------------------------------
-# STATE: quarry provenance + build
+# STATE: build checks
 # ---------------------------------------------------------------------------
 
 
-def capture_quarry_provenance(quarry_dir, log):
-    log.log("BUILD", "capturing Quarry git provenance from %s" % quarry_dir)
-    rc, branch, _ = run_host(["git", "branch", "--show-current"], cwd=quarry_dir)
-    rc2, commit, _ = run_host(["git", "rev-parse", "HEAD"], cwd=quarry_dir)
-    rc3, status, _ = run_host(["git", "status", "--porcelain"], cwd=quarry_dir)
-    if rc != 0 or rc2 != 0:
-        raise InfrastructureError("failed to read Quarry git state in %s" % quarry_dir)
-    dirty = len(status.strip()) > 0
-    info = {
-        "branch": branch.strip(),
-        "commit": commit.strip(),
-        "dirty": dirty,
-        "status_short": status.strip(),
-    }
-    log.log(
-        "BUILD",
-        "Quarry branch=%s commit=%s dirty=%s" % (info["branch"], info["commit"], dirty),
-    )
-    if dirty:
-        log.log("BUILD", "WARNING: Quarry working tree is dirty -- provenance recorded, proceeding")
-    return info
-
-
-def build_firmware(harness_dir, log):
-    log.log("BUILD", "running %s/build.sh" % harness_dir)
-    rc, out, err = run_host(["./build.sh"], cwd=harness_dir, timeout=180)
-    log.log("BUILD", "build.sh exit=%d" % rc)
+def check_reader_layout(log):
+    """The on-target reader carries its own copy of the result struct;
+    refuse to run if it has drifted from boards/common/bench_result.h."""
+    rc, out, err = run_host([
+        "cc", "-std=c11", "-fsyntax-only", "-DQUARRY_BENCH_LAYOUT_CHECK",
+        "-I", os.path.join(_hil_root, "boards", "common"), READER_SOURCE,
+    ])
     if rc != 0:
-        raise InfrastructureError("firmware build failed:\nstdout:\n%s\nstderr:\n%s" % (out, err))
-
-    bin_name = None
-    for name in os.listdir(harness_dir):
-        if name.endswith(".bin"):
-            bin_name = name
-    if bin_name is None:
-        raise InfrastructureError("build.sh succeeded but no .bin artifact found in %s" % harness_dir)
-    bin_path = os.path.join(harness_dir, bin_name)
-    elf_path = bin_path[:-4] + ".elf"
-
-    sha256 = sha256_file(bin_path)
-    bin_size = os.path.getsize(bin_path)
-
-    rc, size_out, _ = run_host(["arm-none-eabi-size", elf_path])
-    text = data = bss = None
-    if rc == 0:
-        lines = size_out.strip().splitlines()
-        if len(lines) >= 2:
-            parts = lines[1].split()
-            text, data, bss = int(parts[0]), int(parts[1]), int(parts[2])
-
-    rc, gcc_version, _ = run_host(["arm-none-eabi-gcc", "--version"])
-    compiler_version = gcc_version.splitlines()[0] if rc == 0 else "unknown"
-
-    info = {
-        "bin_path": bin_path,
-        "bin_name": bin_name,
-        "sha256": sha256,
-        "bin_bytes": bin_size,
-        "text_bytes": text,
-        "data_bytes": data,
-        "bss_bytes": bss,
-        "compiler": compiler_version,
-        "flags": "-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard "
-        "-ffreestanding -fno-builtin -nostdlib -nostartfiles -Os -std=c11",
-    }
-    log.log(
-        "BUILD",
-        "firmware=%s sha256=%s text=%s data=%s bss=%s bin=%d bytes"
-        % (bin_name, sha256[:16], text, data, bss, bin_size),
-    )
-    return info
+        raise InfrastructureError("read_bench_result.c layout check failed:\n%s%s" % (out, err))
+    log.log("BUILD", "reader struct layout matches bench_result.h")
 
 
 # ---------------------------------------------------------------------------
@@ -432,7 +391,9 @@ def uboot_load_and_start_m4(link, log, remote_bin_name, expected_stack_hex, expe
         raise InfrastructureError("bootaux did not print expected stack/pc banner: %r" % text)
     got_stack, got_pc = m.group(1).lower(), m.group(2).lower()
     if got_stack != expected_stack_hex.lower() or got_pc != expected_pc_hex.lower():
-        raise TestFailure(
+        # Not a codec verdict: the board is about to run something other
+        # than the firmware just built, so this is a binding failure.
+        raise BindingMismatch(
             "bootaux stack/pc mismatch: got stack=%s pc=%s, expected stack=%s pc=%s "
             "(wrong firmware loaded, or build/link inconsistency)"
             % (got_stack, got_pc, expected_stack_hex, expected_pc_hex)
@@ -594,36 +555,18 @@ def collect_result(link, log, remote_bin, timeout=15):
 # ---------------------------------------------------------------------------
 
 
-def validate_result(result, log):
-    log.log("VALIDATE", "checking magic/version/state/result_code/validation_failures")
-    checks = []
-
-    ok_magic = result.get("magic") == "0x51424e31"
-    checks.append(("magic", ok_magic, result.get("magic")))
-
-    ok_version = result.get("version") == 1
-    checks.append(("version", ok_version, result.get("version")))
-
-    ok_state = result.get("state") == 2
-    checks.append(("state (TEST_COMPLETE)", ok_state, result.get("state")))
-
-    ok_result_code = result.get("result_code") == 1
-    checks.append(("result_code (PASS)", ok_result_code, result.get("result_code")))
-
-    ok_failures = result.get("validation_failures") == 0
-    checks.append(("validation_failures", ok_failures, result.get("validation_failures")))
-
-    counter = result.get("counter", 0)
-    ok_heartbeat = counter is not None and counter > 0
-    checks.append(("heartbeat counter > 0", ok_heartbeat, counter))
-
-    for name, ok, value in checks:
-        log.log("VALIDATE", "%-28s %-4s (value=%s)" % (name, "OK" if ok else "FAIL", value))
-
-    if not all(ok for _, ok, _ in checks):
-        failed = [name for name, ok, _ in checks if not ok]
+def validate_result(result, manifest, log):
+    log.log("VALIDATE", "checking result against the build that produced the firmware")
+    checks = result_checks.check_benchmark(result, manifest, require_heartbeat=True)
+    for name, ok, value, domain in checks:
+        log.log("VALIDATE", "%-38s %-4s (value=%s)" % (name, "OK" if ok else "FAIL", value))
+    ok, failed, domain = result_checks.summarize(checks)
+    if not ok:
+        if domain == "binding":
+            raise BindingMismatch(
+                "board did not run the firmware just built (%s) -- result discarded" % ", ".join(failed)
+            )
         raise TestFailure("validation failed: %s" % ", ".join(failed))
-
     log.log("VALIDATE", "all checks passed")
 
 
@@ -644,9 +587,8 @@ def run_hardware_sequence(link, log, fw_info, stack_top, pc_entry, args):
     remote_bin_path = transfer_firmware(link, log, fw_info["bin_path"], fw_info["sha256"])
     remote_bin_name = os.path.basename(remote_bin_path)
 
-    reader_source = os.path.join(args.harness_dir, "read_bench_result.c")
     # Reader must be transferred/compiled while Linux is up, before reboot.
-    remote_reader_bin = ensure_reader_on_target(link, log, reader_source)
+    remote_reader_bin = ensure_reader_on_target(link, log, READER_SOURCE)
 
     log.log("ENTER_UBOOT", "issuing reboot from live shell")
     link.clear_buffer()
@@ -672,52 +614,47 @@ def run_hardware_sequence(link, log, fw_info, stack_top, pc_entry, args):
 
 def main():
     parser = argparse.ArgumentParser(description="VisionCB Cortex-M4F local HIL runner")
-    parser.add_argument("--quarry-dir", default="/home/igor/work/quarry")
-    parser.add_argument("--harness-dir", default="/home/igor/work/visioncb-m4/quarry_bench")
+    run_setup.add_source_args(parser)
     parser.add_argument("--runs-dir", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "runs"))
-    parser.add_argument("--skip-build", action="store_true", help="reuse existing firmware artifact")
     args = parser.parse_args()
 
     timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    run_dir = os.path.join(args.runs_dir, timestamp)
+    run_dir = os.path.join(args.runs_dir, "%s-%s" % (timestamp, args.presence_layout))
     os.makedirs(run_dir, exist_ok=True)
     log = Logger(run_dir)
     console_log_path = os.path.join(run_dir, "console.log")
 
     result_doc = {
-        "schema_version": 1,
+        "schema_version": 2,
         "result": "UNKNOWN",
         "run_dir": run_dir,
+        "presence_layout": args.presence_layout,
     }
 
     link = None
+    stage = "build"
     try:
-        quarry_info = capture_quarry_provenance(args.quarry_dir, log)
-        result_doc["quarry"] = quarry_info
+        try:
+            provenance, manifest = run_setup.prepare_firmware(args, FIRMWARE_SPEC, log)
+        except (quarry_source.SourceError, firmware_build.BuildError) as e:
+            raise InfrastructureError(str(e))
+        except firmware_build.CodecCheckError as e:
+            raise TestFailure(str(e))
+        finally:
+            run_setup.copy_build_evidence(args, FIRMWARE_SPEC, run_dir)
+        result_doc.update(provenance)
+        fw = manifest["firmware"]
+        result_doc["firmware"] = fw
+        result_doc["toolchain"] = {"compiler": fw["compiler"], "flags": fw["flags"]}
+        fw_info = {"bin_path": manifest["firmware_paths"]["bin"], "sha256": fw["sha256"]}
+        check_reader_layout(log)
 
-        if args.skip_build:
-            log.log("BUILD", "skip-build requested, reusing existing artifact")
-            fw_info = build_firmware(args.harness_dir, log)  # still recomputes checksum/sizes
-        else:
-            fw_info = build_firmware(args.harness_dir, log)
-        result_doc["firmware"] = {
-            k: v for k, v in fw_info.items() if k not in ("bin_path",)
-        }
-        result_doc["toolchain"] = {"compiler": fw_info["compiler"], "flags": fw_info["flags"]}
-
-        rc, nm_out, _ = run_host(["arm-none-eabi-nm", fw_info["bin_path"][:-4] + ".elf"])
-        stack_top = pc_entry = None
-        for line in nm_out.splitlines():
-            if line.endswith(" B __StackTop") or line.endswith("__StackTop"):
-                stack_top = "0x" + line.split()[0]
-        rc, readelf_out, _ = run_host(["arm-none-eabi-readelf", "-h", fw_info["bin_path"][:-4] + ".elf"])
-        for line in readelf_out.splitlines():
-            if "Entry point address" in line:
-                pc_entry = line.split(":")[1].strip()
+        stack_top, pc_entry = fw["stack_top"], fw["entry_point"]
         if stack_top is None or pc_entry is None:
             raise InfrastructureError("could not determine expected __StackTop/entry point from build artifacts")
         log.log("BUILD", "expected bootaux banner: stack=%s pc=%s" % (stack_top, pc_entry))
 
+        stage = "hardware"
         device = discover_device(log)
         result_doc["target"] = {
             "board": "VisionCB-8M-STD",
@@ -753,20 +690,26 @@ def main():
 
         result_doc["benchmark"] = board_result
 
-        validate_result(board_result, log)
+        stage = "validate"
+        validate_result(board_result, manifest, log)
 
         result_doc["result"] = "PASS"
         log.log("PASS", "HIL run PASSED")
         exit_code = 0
 
     except RunnerError as e:
-        result_doc["result"] = type(e).__name__.upper()
+        # Schema result codes (infrastructure/schema/result_schema.py), keyed
+        # by the exit-code contract -- not the exception class name, which
+        # used to leak out as e.g. "INFRASTRUCTUREERROR".
+        result_doc["result"] = RESULT_CODES[e.exit_code]
         result_doc["error"] = str(e)
-        log.log(type(e).__name__.upper(), str(e))
+        result_doc["failure_domain"] = failure_domain(e, stage)
+        log.log(result_doc["result"], "[%s] %s" % (result_doc["failure_domain"], e))
         exit_code = e.exit_code
     except Exception as e:  # noqa: BLE001 -- top-level safety net, must not hang/crash silently
         result_doc["result"] = "INFRASTRUCTURE_ERROR"
         result_doc["error"] = "unexpected exception: %r" % (e,)
+        result_doc["failure_domain"] = "infrastructure"
         log.log("INFRASTRUCTURE_ERROR", "unexpected exception: %r" % (e,))
         exit_code = 2
     finally:
@@ -780,6 +723,21 @@ def main():
 
     print(json.dumps(result_doc, indent=2, default=str))
     return exit_code
+
+
+def failure_domain(error, stage):
+    """codec: Quarry itself misbehaved. binding: the board did not run the
+    firmware just built. hardware: device/probe/boot/transport problem.
+    infrastructure: source selection or build problem."""
+    if isinstance(error, BindingMismatch):
+        return "binding"
+    if isinstance(error, TestFailure):
+        return "codec"
+    if isinstance(error, RecoveryRequired):
+        return "hardware"
+    if stage == "build":
+        return "infrastructure"
+    return "hardware"
 
 
 if __name__ == "__main__":

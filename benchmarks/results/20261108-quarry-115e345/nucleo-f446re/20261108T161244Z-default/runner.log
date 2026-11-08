@@ -1,0 +1,38 @@
+[2026-11-08T16:12:44+00:00] SOURCE               fetching origin in /home/igor/.cache/visioncb-hil/quarry-ci-checkout
+[2026-11-08T16:12:44+00:00] SOURCE               Quarry ref 'main' resolved to 115e345223d31e3ea94b842c2173f740223fd4c0 (checked out detached in /home/igor/.cache/visioncb-hil/quarry-ci-checkout)
+[2026-11-08T16:12:44+00:00] SOURCE               Quarry commit=115e345223d31e3ea94b842c2173f740223fd4c0 branch=(detached) dirty=False
+[2026-11-08T16:12:44+00:00] SOURCE               quarry-hil commit=67438ba98dddc046b3e5acfbde52e67166c64d68 branch=feature/quarry-main-typed-codec-bench dirty=False untracked=1
+[2026-11-08T16:12:44+00:00] BUILD                reusing host quarry-schema-compiler built from 115e345223d3 (/home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0)
+[2026-11-08T16:12:44+00:00] BUILD                generated 2 file(s) with --language c (API 5)
+[2026-11-08T16:12:44+00:00] BUILD                generated 2 file(s) with --language c (API 5)
+[2026-11-08T16:12:45+00:00] BUILD                generated 2 file(s) with --language c --c-optimize-size (API 5)
+[2026-11-08T16:12:45+00:00] BUILD                host gate: both layouts encode identical 88-byte payloads (native sizeof default=96, optimize-size=80)
+[2026-11-08T16:12:45+00:00] BUILD                nucleo-f446re/default firmware sha256=3d7e9da47eb2cf5c text=6884 data=0 bss=11336 input_digest=14ea6208 warnings=0
+[2026-11-08T16:12:45+00:00] BUILD                g_result layout check OK (6408 bytes, 404-byte wire prefix)
+[2026-11-08T16:12:45+00:00] DISCOVER             using st-flash: /usr/bin/st-flash
+[2026-11-08T16:12:45+00:00] DISCOVER             resolving ST-LINK/V2.1 VCP 0669FF565271525067071140 via /dev/serial/by-id
+[2026-11-08T16:12:45+00:00] DISCOVER             resolved device: /dev/ttyACM2
+[2026-11-08T16:12:45+00:00] FLASH                st-flash write /home/igor/work/quarry-hil/build/nucleo-f446re/default/nucleo_bench-default.bin 0x08000000 (serial=0669FF565271525067071140)
+[2026-11-08T16:12:46+00:00] FLASH                st-flash write exit=0
+[2026-11-08T16:12:46+00:00] FLASH                write verified
+[2026-11-08T16:12:46+00:00] RESET                st-flash reset (serial=0669FF565271525067071140)
+[2026-11-08T16:12:46+00:00] RESET                st-flash reset exit=0
+[2026-11-08T16:12:46+00:00] COLLECT_RESULT       waiting for firmware to stream its result over UART
+[2026-11-08T16:12:47+00:00] COLLECT_RESULT       parsed result: result_code=1 validation_failures=0
+[2026-11-08T16:12:47+00:00] VALIDATE             checking result against the build that produced the firmware
+[2026-11-08T16:12:47+00:00] VALIDATE             magic                                  OK   (value=0x51424e31)
+[2026-11-08T16:12:47+00:00] VALIDATE             result struct version                  OK   (value=2)
+[2026-11-08T16:12:47+00:00] VALIDATE             presence_layout matches build          OK   (value=0)
+[2026-11-08T16:12:47+00:00] VALIDATE             quarry_commit_prefix matches build     OK   (value=115e3452)
+[2026-11-08T16:12:47+00:00] VALIDATE             build_input_digest matches build       OK   (value=14ea6208)
+[2026-11-08T16:12:47+00:00] VALIDATE             state (TEST_COMPLETE)                  OK   (value=2)
+[2026-11-08T16:12:47+00:00] VALIDATE             result_code (PASS)                     OK   (value=1)
+[2026-11-08T16:12:47+00:00] VALIDATE             validation_failures                    OK   (value=0)
+[2026-11-08T16:12:47+00:00] VALIDATE             iterations                             OK   (value=500)
+[2026-11-08T16:12:47+00:00] VALIDATE             record_sizeof > 0                      OK   (value=88)
+[2026-11-08T16:12:47+00:00] VALIDATE             payload fully captured                 OK   (value=88/88)
+[2026-11-08T16:12:47+00:00] VALIDATE             payload fnv1a matches capture          OK   (value=a1bf5120)
+[2026-11-08T16:12:47+00:00] VALIDATE             payload equals host-native encoding    OK   (value=88 bytes)
+[2026-11-08T16:12:47+00:00] VALIDATE             all checks passed
+[2026-11-08T16:12:47+00:00] PASS                 HIL run PASSED
+[2026-11-08T16:12:47+00:00] DONE                 result written to /home/igor/work/quarry-hil/boards/nucleo-f446re/runs/20261108T161244Z-default/result.json, exit_code=0

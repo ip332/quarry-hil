@@ -1,0 +1,73 @@
+[2026-11-08T16:14:59+00:00] SOURCE               fetching origin in /home/igor/.cache/visioncb-hil/quarry-ci-checkout
+[2026-11-08T16:14:59+00:00] SOURCE               Quarry ref 'main' resolved to 115e345223d31e3ea94b842c2173f740223fd4c0 (checked out detached in /home/igor/.cache/visioncb-hil/quarry-ci-checkout)
+[2026-11-08T16:14:59+00:00] SOURCE               Quarry commit=115e345223d31e3ea94b842c2173f740223fd4c0 branch=(detached) dirty=False
+[2026-11-08T16:14:59+00:00] SOURCE               quarry-hil commit=67438ba98dddc046b3e5acfbde52e67166c64d68 branch=feature/quarry-main-typed-codec-bench dirty=False untracked=1
+[2026-11-08T16:14:59+00:00] BUILD                reusing host quarry-schema-compiler built from 115e345223d3 (/home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0)
+[2026-11-08T16:14:59+00:00] BUILD                generated 2 file(s) with --language c --c-optimize-size (API 5)
+[2026-11-08T16:14:59+00:00] BUILD                generated 2 file(s) with --language c (API 5)
+[2026-11-08T16:14:59+00:00] BUILD                generated 2 file(s) with --language c --c-optimize-size (API 5)
+[2026-11-08T16:14:59+00:00] BUILD                host gate: both layouts encode identical 84-byte payloads (native sizeof default=96, optimize-size=80)
+[2026-11-08T16:15:00+00:00] BUILD                visioncb-8m-std/optimize-size firmware sha256=99cf278362cb78a6 text=6704 data=0 bss=11304 input_digest=a16dd4e7 warnings=0
+[2026-11-08T16:15:00+00:00] BUILD                reader struct layout matches bench_result.h
+[2026-11-08T16:15:00+00:00] BUILD                expected bootaux banner: stack=0x20003320 pc=0x1ffe0243
+[2026-11-08T16:15:00+00:00] DISCOVER             resolving SEGGER J-Link 000900003460 via /dev/serial/by-id
+[2026-11-08T16:15:00+00:00] DISCOVER             resolved device: /dev/ttyACM1
+[2026-11-08T16:15:00+00:00] ACQUIRE_CONSOLE      power-cycle attempt 1/2: cycling board power via relay
+[2026-11-08T16:15:00+00:00] POWER                WARNING: relay board serial is '9oOMZ', expected 'QAAMZ' (EEPROM serial corrupted?) -- using it since it is the only relay board present
+[2026-11-08T16:15:00+00:00] POWER                power-cycling board via relay 9oOMZ_1
+[2026-11-08T16:15:00+00:00] POWER                relay 9oOMZ_1 -> OFF (confirmed)
+[2026-11-08T16:15:03+00:00] POWER                relay 9oOMZ_1 -> ON (confirmed)
+[2026-11-08T16:15:06+00:00] ACQUIRE_CONSOLE      state=UBOOT (caught after power-cycle attempt 1)
+[2026-11-08T16:15:06+00:00] ACQUIRE_CONSOLE      at U-Boot prompt with no firmware transferred yet -- resuming Linux first
+[2026-11-08T16:15:06+00:00] BOOT_LINUX           resuming SD Linux boot (fatload Image/dtb, booti)
+[2026-11-08T16:15:10+00:00] WAIT_FOR_LINUX       waiting up to 40s for login prompt
+[2026-11-08T16:15:21+00:00] WAIT_FOR_LINUX       login prompt reached, banner confirms 'kirkstone'
+[2026-11-08T16:15:21+00:00] LOGIN                logging in as root
+[2026-11-08T16:15:22+00:00] LOGIN                shell prompt acquired
+[2026-11-08T16:15:22+00:00] VERIFY_SD_ROOT       checking findmnt /
+[2026-11-08T16:15:24+00:00] VERIFY_SD_ROOT       confirmed root on /dev/mmcblk0p2
+[2026-11-08T16:15:24+00:00] UNMOUNT_EMMC         checking for auto-mounted mmcblk2* partitions
+[2026-11-08T16:15:25+00:00] UNMOUNT_EMMC         found mounted eMMC partitions, unmounting: ['/dev/mmcblk2p1 on /run/media/boot-mmcblk2p1 type vfat (rw,relatime,gid=6,fmask=0007,dmask=0007,allow_utime=0020,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro)', '/dev/mmcblk2p2 on /run/media/root-mmcblk2p2 type ext4 (rw,relatime)']
+[2026-11-08T16:15:27+00:00] UNMOUNT_EMMC         umount output: 'umount /run/media/root-mmcblk2p2 /run/media/boot-mmcblk2\r2p1\r\nroot@visionsom-8mm-cb:~# \r\nroot@visionsom-8mm-cb:~# '
+[2026-11-08T16:15:28+00:00] UNMOUNT_EMMC         confirmed no mmcblk2* partitions mounted
+[2026-11-08T16:15:28+00:00] TRANSFER             checking whether /run/media/boot-mmcblk0p1/quarry_bench-optimize-size.bin already present with matching checksum
+[2026-11-08T16:15:30+00:00] TRANSFER             transferring /home/igor/work/quarry-hil/build/visioncb-8m-std/optimize-size/quarry_bench-optimize-size.bin (6704 bytes) via base64 over console
+[2026-11-08T16:15:34+00:00] TRANSFER             checksum verified on-device: 99cf278362cb78a6
+[2026-11-08T16:15:35+00:00] COLLECT_RESULT       reader already present on-target with matching checksum, reusing
+[2026-11-08T16:15:35+00:00] ENTER_UBOOT          issuing reboot from live shell
+[2026-11-08T16:15:41+00:00] ENTER_UBOOT          U-Boot prompt caught
+[2026-11-08T16:15:41+00:00] LOAD_M4              mmc dev 0 / mmc rescan
+[2026-11-08T16:15:45+00:00] LOAD_M4              fatload quarry_bench-optimize-size.bin
+[2026-11-08T16:15:49+00:00] START_M4             bootaux 0x7e0000
+[2026-11-08T16:15:51+00:00] START_M4             confirmed: stack=0x20003320 pc=0x1ffe0243 matches built ELF exactly
+[2026-11-08T16:15:51+00:00] BOOT_LINUX           resuming SD Linux boot (fatload Image/dtb, booti)
+[2026-11-08T16:15:56+00:00] WAIT_FOR_LINUX       waiting up to 40s for login prompt
+[2026-11-08T16:16:06+00:00] WAIT_FOR_LINUX       login prompt reached, banner confirms 'kirkstone'
+[2026-11-08T16:16:06+00:00] LOGIN                logging in as root
+[2026-11-08T16:16:07+00:00] LOGIN                shell prompt acquired
+[2026-11-08T16:16:07+00:00] VERIFY_SD_ROOT       checking findmnt /
+[2026-11-08T16:16:09+00:00] VERIFY_SD_ROOT       confirmed root on /dev/mmcblk0p2
+[2026-11-08T16:16:09+00:00] UNMOUNT_EMMC         checking for auto-mounted mmcblk2* partitions
+[2026-11-08T16:16:10+00:00] UNMOUNT_EMMC         found mounted eMMC partitions, unmounting: ['/dev/mmcblk2p1 on /run/media/boot-mmcblk2p1 type vfat (rw,relatime,gid=6,fmask=0007,dmask=0007,allow_utime=0020,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro)', '/dev/mmcblk2p2 on /run/media/root-mmcblk2p2 type ext4 (rw,relatime)']
+[2026-11-08T16:16:12+00:00] UNMOUNT_EMMC         umount output: 'umount /run/media/root-mmcblk2p2 /run/media/boot-mmcblk2\r2p1\r\nroot@visionsom-8mm-cb:~# \r\nroot@visionsom-8mm-cb:~# '
+[2026-11-08T16:16:13+00:00] UNMOUNT_EMMC         confirmed no mmcblk2* partitions mounted
+[2026-11-08T16:16:13+00:00] COLLECT_RESULT       running on-target reader
+[2026-11-08T16:16:14+00:00] COLLECT_RESULT       parsed result: result_code=1 validation_failures=0
+[2026-11-08T16:16:14+00:00] VALIDATE             checking result against the build that produced the firmware
+[2026-11-08T16:16:14+00:00] VALIDATE             magic                                  OK   (value=0x51424e31)
+[2026-11-08T16:16:14+00:00] VALIDATE             result struct version                  OK   (value=2)
+[2026-11-08T16:16:14+00:00] VALIDATE             presence_layout matches build          OK   (value=1)
+[2026-11-08T16:16:14+00:00] VALIDATE             quarry_commit_prefix matches build     OK   (value=115e3452)
+[2026-11-08T16:16:14+00:00] VALIDATE             build_input_digest matches build       OK   (value=a16dd4e7)
+[2026-11-08T16:16:14+00:00] VALIDATE             state (TEST_COMPLETE)                  OK   (value=2)
+[2026-11-08T16:16:14+00:00] VALIDATE             result_code (PASS)                     OK   (value=1)
+[2026-11-08T16:16:14+00:00] VALIDATE             validation_failures                    OK   (value=0)
+[2026-11-08T16:16:14+00:00] VALIDATE             iterations                             OK   (value=500)
+[2026-11-08T16:16:14+00:00] VALIDATE             record_sizeof > 0                      OK   (value=72)
+[2026-11-08T16:16:14+00:00] VALIDATE             heartbeat counter > 0                  OK   (value=238)
+[2026-11-08T16:16:14+00:00] VALIDATE             payload fully captured                 OK   (value=84/84)
+[2026-11-08T16:16:14+00:00] VALIDATE             payload fnv1a matches capture          OK   (value=305fca0b)
+[2026-11-08T16:16:14+00:00] VALIDATE             payload equals host-native encoding    OK   (value=84 bytes)
+[2026-11-08T16:16:14+00:00] VALIDATE             all checks passed
+[2026-11-08T16:16:14+00:00] PASS                 HIL run PASSED
+[2026-11-08T16:16:14+00:00] DONE                 result written to /home/igor/work/quarry-hil/boards/visioncb-8m-std/runs/20261108T161459Z-optimize-size/result.json, exit_code=0

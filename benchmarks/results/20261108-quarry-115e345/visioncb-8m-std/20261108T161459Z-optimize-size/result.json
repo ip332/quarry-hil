@@ -1,0 +1,216 @@
+{
+  "schema_version": 2,
+  "result": "PASS",
+  "run_dir": "/home/igor/work/quarry-hil/boards/visioncb-8m-std/runs/20261108T161459Z-optimize-size",
+  "presence_layout": "optimize-size",
+  "quarry": {
+    "path": "/home/igor/.cache/visioncb-hil/quarry-ci-checkout",
+    "commit": "115e345223d31e3ea94b842c2173f740223fd4c0",
+    "tree": "3bb4ce0ebe0318826c69f2d6c4b53ce1fa2a6ab0",
+    "branch": "(detached)",
+    "describe": "v0.1.30-rc.3-2-g115e345",
+    "remote": "https://github.com/ip332/quarry.git",
+    "dirty": false,
+    "status_short": "",
+    "untracked": [],
+    "selection": "ci-checkout",
+    "requested_ref": "main"
+  },
+  "hil": {
+    "path": "/home/igor/work/quarry-hil",
+    "commit": "67438ba98dddc046b3e5acfbde52e67166c64d68",
+    "tree": "b7ae7bc4e25c7ef35d3ca2c384dae0b3d66a86eb",
+    "branch": "feature/quarry-main-typed-codec-bench",
+    "describe": "67438ba",
+    "remote": "https://github.com/ip332/quarry-hil.git",
+    "dirty": false,
+    "status_short": "",
+    "untracked": [
+      "boards/visioncb-8m-std/.visioncb-8m-std.lock"
+    ]
+  },
+  "build": {
+    "presence_layout": "optimize-size",
+    "generation_options": [
+      "--language",
+      "c",
+      "--c-optimize-size"
+    ],
+    "input_digest": "a16dd4e795868a3e98a6ffd99a996349cd8e7239afa14daf31ee0eb89f9467c2",
+    "manifest_path": "/home/igor/work/quarry-hil/build/visioncb-8m-std/optimize-size/build_manifest.json",
+    "schema_compiler": "quarry-schema-compiler 0.1.266 (115e345)",
+    "schema_compiler_sha256": "f447c9ca1f145dc76ce7eb6ce49a72ec731ed2b3089e81477cc32e741037ba5a",
+    "c_generated_code_api_version": 5,
+    "schema_sha256": "3c4e394cf95a5e5c019ea80650640c462493f35ed6aeda0f63831b4a838b4f46",
+    "generated_files": {
+      "hil/telemetry.generated.c": "15e12dcdea8761bd6ca711d4ad91fed9b6224927fd63d27382dd643cb6faf192",
+      "hil/telemetry.generated.h": "d4a85304520aaf542cfebb6516214c2399f03f6ca924e84b53c5012afa689701"
+    },
+    "quarry_runtime_inputs": {
+      "runtime_c/typed_record.c": "580d0d7c6c127a2a5fb2b037889f3568990b144e0a7cdc92114ec364eccc15e3",
+      "include/quarry/runtime_c/binary_record.h": "0f0e11a01db6a494b563db1a6eda42d762ce23090015792a221c08ca8005f875",
+      "include/quarry/runtime_c/binary_record_v2.h": "5d5133fbe69f323b0fc52033209e2b305874c608a0201ba5766294bc966dec42",
+      "include/quarry/runtime_c/generic_brf.h": "b9a3ce46ec3e52cc5fbb50c6fb118720abc489b218e6be0ee00e11bb7abf7ba0",
+      "include/quarry/runtime_c/generic_brf_encoding.h": "0fddf71796356ed71041fd6bd105a43f1c6852ed2abe6f16c7f1ac12fc32a4d6",
+      "include/quarry/runtime_c/typed_record.h": "e3fb8982652119d3e2c79ecaf1ae546207a577ba7a7b6eb838e8d856addb924b"
+    },
+    "harness_sources": {
+      "boards/visioncb-8m-std/firmware/startup.c": "83dea24af06cbf3910e887f9d778ceb3a8ebed6f128b87420865ededbf78ba64",
+      "boards/common/libc_shim.c": "d9eb733210b26a14715b31187773a39796a96e35a5d8d25c254e12aa22b43bbf",
+      "boards/visioncb-8m-std/firmware/main.c": "784f69a69af00ff15e37f4d866192bfa5872e5bacc97832e057fb8034926068f",
+      "boards/common/dwt.h": "f5e30523bfcd4be6e901eaced7466561374b52b9f29c5b0991a9e515961be5d8",
+      "boards/common/bench_result.h": "0271a4884812c66b84e9871c8f0494889649e2bdd2d618921da352ec4fedb50d",
+      "boards/common/telemetry_workload.h": "e75aa61f7d22e9fe5466f697b40f1242becd46d90db6f5c45b505464fcb9865f",
+      "boards/visioncb-8m-std/firmware/link.ld": "ab7d3f3acc9dd24e410c6bcf38015059dedfa47ac41309997f40be1de39ebbe9",
+      "boards/common/telemetry.brd": "3c4e394cf95a5e5c019ea80650640c462493f35ed6aeda0f63831b4a838b4f46"
+    },
+    "full_cflags": [
+      "-mcpu=cortex-m4",
+      "-mthumb",
+      "-mfpu=fpv4-sp-d16",
+      "-mfloat-abi=hard",
+      "-ffreestanding",
+      "-fno-builtin",
+      "-nostdlib",
+      "-nostartfiles",
+      "-Wall",
+      "-Wextra",
+      "-Os",
+      "-g",
+      "-std=c11",
+      "-DQUARRY_BENCH_DEVICE_ID=\"m4-hil-01\"",
+      "-DQUARRY_BENCH_QUARRY_COMMIT_PREFIX=0x115e3452u",
+      "-DQUARRY_BENCH_BUILD_INPUT_DIGEST=0xa16dd4e7u",
+      "-DQUARRY_BENCH_PRESENCE_PACKED_LAYOUT=1",
+      "-I",
+      "/home/igor/work/quarry-hil/build/visioncb-8m-std/optimize-size/src",
+      "-I",
+      "/home/igor/work/quarry-hil/build/visioncb-8m-std/optimize-size/generated",
+      "-I",
+      "/home/igor/.cache/visioncb-hil/quarry-ci-checkout/include",
+      "-I",
+      "/home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0/generated"
+    ],
+    "footprint": {
+      "elf": {
+        "text": 6704,
+        "data": 0,
+        "bss": 11304
+      },
+      "objects": {
+        "libc_shim": {
+          "text": 40,
+          "data": 0,
+          "bss": 0
+        },
+        "main": {
+          "text": 2368,
+          "data": 6408,
+          "bss": 800
+        },
+        "startup": {
+          "text": 716,
+          "data": 0,
+          "bss": 0
+        },
+        "telemetry.generated": {
+          "text": 0,
+          "data": 0,
+          "bss": 0
+        },
+        "typed_record": {
+          "text": 3572,
+          "data": 0,
+          "bss": 0
+        }
+      }
+    },
+    "compile_warnings": [],
+    "host_layout_gate": {
+      "default": {
+        "presence_layout": 0,
+        "record_sizeof": 96,
+        "encoded_bytes": 84,
+        "fnv1a": "305fca0b",
+        "payload_hex": "02000010000000010000002e00000054ff01000003e90000018bcfe5687b41c400000e7401010000003e0000000900000047000000040000004b000000096d342d68696c2d3031deadbeef04ff88000001540fff"
+      },
+      "optimize-size": {
+        "presence_layout": 1,
+        "record_sizeof": 80,
+        "encoded_bytes": 84,
+        "fnv1a": "305fca0b",
+        "payload_hex": "02000010000000010000002e00000054ff01000003e90000018bcfe5687b41c400000e7401010000003e0000000900000047000000040000004b000000096d342d68696c2d3031deadbeef04ff88000001540fff"
+      }
+    }
+  },
+  "firmware": {
+    "bin_name": "quarry_bench-optimize-size.bin",
+    "sha256": "99cf278362cb78a6cf8804fa8d8655683e8f6efe55cd5fd5efc45a5428050b33",
+    "elf_sha256": "f14d155a76741c8fd25a93edf27c296ac2dac358d7852daa25dd157651846798",
+    "bin_bytes": 6704,
+    "text_bytes": 6704,
+    "data_bytes": 0,
+    "bss_bytes": 11304,
+    "compiler": "arm-none-eabi-gcc (15:10.3-2021.07-4) 10.3.1 20210621 (release)",
+    "flags": "-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -ffreestanding -fno-builtin -nostdlib -nostartfiles -Wall -Wextra -Os -g -std=c11",
+    "stack_top": "0x20003320",
+    "entry_point": "0x1ffe0243"
+  },
+  "toolchain": {
+    "compiler": "arm-none-eabi-gcc (15:10.3-2021.07-4) 10.3.1 20210621 (release)",
+    "flags": "-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -ffreestanding -fno-builtin -nostdlib -nostartfiles -Wall -Wextra -Os -g -std=c11"
+  },
+  "target": {
+    "board": "VisionCB-8M-STD",
+    "soc": "NXP i.MX8M Mini",
+    "cpu": "Cortex-M4F",
+    "clock_hz": 200000000,
+    "serial_device": "/dev/ttyACM1"
+  },
+  "benchmark": {
+    "platform": "VisionCB-8M-STD",
+    "cpu": "Cortex-M4F",
+    "workload": "telemetry",
+    "magic": "0x51424e31",
+    "version": 2,
+    "state": 2,
+    "result_code": 1,
+    "counter": 238,
+    "dwt_supported": true,
+    "timing_overhead_cycles": 9,
+    "iterations": 500,
+    "encoded_bytes": 84,
+    "validation_failures": 0,
+    "encode_cycles": {
+      "min": 12195,
+      "max": 12195,
+      "mean": 12195.0,
+      "median": 12195.0,
+      "sum": 6097500
+    },
+    "decode_cycles": {
+      "min": 6411,
+      "max": 6411,
+      "mean": 6411.0,
+      "median": 6411.0,
+      "sum": 3205500
+    },
+    "roundtrip_cycles": {
+      "min": 18598,
+      "max": 18598,
+      "mean": 18598.0,
+      "median": 18598.0,
+      "sum": 9299000
+    },
+    "stack_watermark_bytes": 680,
+    "stack_region_bytes": 4096,
+    "heap_bytes": 0,
+    "record_sizeof": 72,
+    "presence_layout": 1,
+    "quarry_commit_prefix": "115e3452",
+    "build_input_digest": "a16dd4e7",
+    "encoded_payload_fnv1a": "305fca0b",
+    "encoded_payload_captured_bytes": 84,
+    "encoded_payload_hex": "02000010000000010000002e00000054ff01000003e90000018bcfe5687b41c400000e7401010000003e0000000900000047000000040000004b000000096d342d68696c2d3031deadbeef04ff88000001540fff"
+  }
+}
