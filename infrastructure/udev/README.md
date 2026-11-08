@@ -28,3 +28,23 @@ Verify it took effect:
 uhubctl -l 3-11.2   # should list the hub's ports with no sudo needed
 ```
 (`3-11.2` is this specific host's hub location. A different host would need `uhubctl` run once, with the relevant device connected, to find its own hub location — `lsusb -t` plus `udevadm info --query=path --name=/dev/bus/usb/<bus>/<dev>` shows the sysfs devpath, whose last `bus-port[.port...]` segment is uhubctl's `-l` location.)
+
+### `53-udisks-ignore-nucleo.rules` (NUCLEO-F446RE)
+
+Stops `udisks2`/`gvfs` from auto-mounting the ST-LINK/V2.1's own mass-storage LUN (labeled `NOD_F446RE`). That is its drag-and-drop flashing volume, which this HIL flow doesn't use: it flashes over SWD via `st-flash`. The volume reappears every time the ST-LINK re-enumerates (cable replug, host reboot). Without this rule, that re-triggers auto-mount, which shows a mount-authentication popup in a desktop session and, on the headless self-hosted CI host, is just friction with no one to answer it.
+
+The rule matches `ATTRS{serial}` (a plain sysfs attribute, readable immediately), not `ENV{ID_SERIAL_SHORT}`. The latter looks more obviously "correct", but it is only populated later, by `/usr/lib/udev/rules.d/60-persistent-storage.rules`'s `IMPORT{builtin}="usb_id"`. udev evaluates rule files in filename sort order, and this file is numbered `53` (see "Numbering" below), so a rule keyed on `ID_SERIAL_SHORT` would run before that property exists and silently never match. This was diagnosed by comparing `udevadm info --attribute-walk`, which showed `ATTRS{serial}` on the ST-LINK's own USB device node one level above the block device, with `udevadm info --query=property`, which only showed `ID_SERIAL_SHORT` well after the fact.
+
+Verify it took effect (after a replug, so a fresh device add event re-evaluates the rule):
+```
+udevadm info --query=property --name=/dev/sdX | grep IGNORE   # should show UDISKS_IGNORE=1
+udisksctl info -b /dev/sdX | grep HintIgnore                  # should show true
+```
+
+### VisionCB-8M-STD's relay — no custom rule needed
+
+The `usbrelay` CLI's own Debian package ships `/usr/lib/udev/rules.d/92-usbrelay.rules`, which already grants non-root HID access to the dcttech USBRelay4 board `infrastructure/core/power_relay.py` talks to. Nothing extra to install here beyond `sudo apt-get install -y usbrelay`.
+
+## Numbering
+
+udev evaluates filenames in lexical sort order, and that order matters here (see the `53-udisks-ignore-nucleo.rules` note above). Custom rules that only read early-available data (plain `ATTR{}`/`ATTRS{}` sysfs attributes) aren't order-sensitive. Any rule that reads an `ENV{}` property set by another rule (like `ID_SERIAL_SHORT`) must sort after the file that sets it. `52`/`53` just continue this host's existing local numbering gap between the system defaults (`50-*`, `60-*`) and vendor-shipped rules (`70-*` snap rules, `80-udisks2.rules`, `92-usbrelay.rules`, `99-*`). Another host doesn't have to use exactly these numbers, only keep any `ENV{}`-dependent rule after its source.
