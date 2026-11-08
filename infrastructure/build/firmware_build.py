@@ -39,13 +39,6 @@ import subprocess
 HIL_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEFAULT_BUILD_ROOT = os.path.join(HIL_ROOT, "build")
 DEFAULT_CACHE_ROOT = os.environ.get("QUARRY_HIL_CACHE", os.path.expanduser("~/.cache/quarry-hil"))
-# Optional user-local prefix holding libyaml/absl development files, for
-# hosts where they are not installed system-wide (see README "Host build
-# dependencies"). Used only if the directory exists.
-DEFAULT_HOSTDEPS_PREFIX = os.environ.get(
-    "QUARRY_HIL_HOSTDEPS_PREFIX", os.path.join(DEFAULT_CACHE_ROOT, "hostdeps", "prefix", "usr")
-)
-
 PRESENCE_LAYOUTS = ("default", "optimize-size")
 
 # Same architecture/ABI/optimization flags both harnesses always used.
@@ -101,8 +94,7 @@ def _tool_version(tool):
 # ---------------------------------------------------------------------------
 
 
-def ensure_host_compiler(quarry_dir, quarry_info, log, cache_root=DEFAULT_CACHE_ROOT,
-                         hostdeps_prefix=DEFAULT_HOSTDEPS_PREFIX, jobs=8):
+def ensure_host_compiler(quarry_dir, quarry_info, log, cache_root=DEFAULT_CACHE_ROOT, jobs=8):
     commit = quarry_info["commit"]
     key = commit if not quarry_info["dirty"] else "%s-dirty-%s" % (commit, quarry_info["dirty_digest"][:12])
     build_dir = os.path.join(cache_root, "host-build", key)
@@ -115,19 +107,6 @@ def ensure_host_compiler(quarry_dir, quarry_info, log, cache_root=DEFAULT_CACHE_
         "-DQUARRY_WARNINGS_AS_ERRORS=ON",
         "-DQUARRY_ENABLE_CLANG_TIDY=OFF",
     ]
-    if hostdeps_prefix and os.path.isdir(hostdeps_prefix):
-        libdir = os.path.join(hostdeps_prefix, "lib", "x86_64-linux-gnu")
-        if os.path.exists(os.path.join(hostdeps_prefix, "include", "yaml.h")):
-            cmake_args.append("-DQUARRY_LIBYAML_INCLUDE_DIR=%s" % os.path.join(hostdeps_prefix, "include"))
-            # The prefix's libyaml.so dev symlink points at a runtime
-            # library that lives in the system lib dir, not the prefix.
-            for candidate in ("/usr/lib/x86_64-linux-gnu/libyaml-0.so.2", os.path.join(libdir, "libyaml.so")):
-                if os.path.exists(candidate):
-                    cmake_args.append("-DQUARRY_LIBYAML_LIBRARY=%s" % candidate)
-                    break
-        absl_dir = os.path.join(libdir, "cmake", "absl")
-        if os.path.isdir(absl_dir):
-            cmake_args.append("-Dabsl_DIR=%s" % absl_dir)
 
     def stamp_valid():
         if quarry_info["dirty"] or not (os.path.exists(stamp_path) and os.path.exists(binary)

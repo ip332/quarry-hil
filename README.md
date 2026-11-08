@@ -106,7 +106,7 @@ python3 tools/compare_results.py RUN_DIR...                                     
 
 ### Host build dependencies
 
-Building Quarry's host compiler needs CMake, protobuf (`protoc` matching the headers), absl and libyaml development files, plus `arm-none-eabi-gcc` with newlib headers. The HIL host has the protobuf toolchain in `/usr/local` but no `libyaml-dev`/`libabsl-dev` system packages. Their unmodified Ubuntu `.deb`s are extracted, without root, into `~/.cache/quarry-hil/hostdeps/prefix` (`apt-get download libyaml-dev libabsl-dev libabsl20210324` then `dpkg -x`), and the build passes that prefix to CMake automatically when it exists (override with `QUARRY_HIL_HOSTDEPS_PREFIX`).
+Building Quarry's host compiler needs CMake, protobuf (`protoc` matching the headers; on the HIL host both are in `/usr/local`), `libabsl-dev`, `libyaml-dev`, and `arm-none-eabi-gcc` with newlib headers. All are found through the normal CMake search paths.
 
 ## GitHub Actions: self-hosted VisionCB HIL
 
