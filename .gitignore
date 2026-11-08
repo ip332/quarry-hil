@@ -44,3 +44,6 @@ generated/
 *.elf
 *.map
 *.o
+
+# Archived benchmark evidence is committed on purpose, logs included.
+!/benchmarks/results/**/*.log

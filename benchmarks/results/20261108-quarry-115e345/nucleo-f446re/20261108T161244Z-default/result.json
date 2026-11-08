@@ -1,0 +1,213 @@
+{
+  "schema_version": 2,
+  "result": "PASS",
+  "run_dir": "/home/igor/work/quarry-hil/boards/nucleo-f446re/runs/20261108T161244Z-default",
+  "presence_layout": "default",
+  "quarry": {
+    "path": "/home/igor/.cache/visioncb-hil/quarry-ci-checkout",
+    "commit": "115e345223d31e3ea94b842c2173f740223fd4c0",
+    "tree": "3bb4ce0ebe0318826c69f2d6c4b53ce1fa2a6ab0",
+    "branch": "(detached)",
+    "describe": "v0.1.30-rc.3-2-g115e345",
+    "remote": "https://github.com/ip332/quarry.git",
+    "dirty": false,
+    "status_short": "",
+    "untracked": [],
+    "selection": "ci-checkout",
+    "requested_ref": "main"
+  },
+  "hil": {
+    "path": "/home/igor/work/quarry-hil",
+    "commit": "67438ba98dddc046b3e5acfbde52e67166c64d68",
+    "tree": "b7ae7bc4e25c7ef35d3ca2c384dae0b3d66a86eb",
+    "branch": "feature/quarry-main-typed-codec-bench",
+    "describe": "67438ba",
+    "remote": "https://github.com/ip332/quarry-hil.git",
+    "dirty": false,
+    "status_short": "",
+    "untracked": [
+      "boards/visioncb-8m-std/.visioncb-8m-std.lock"
+    ]
+  },
+  "build": {
+    "presence_layout": "default",
+    "generation_options": [
+      "--language",
+      "c"
+    ],
+    "input_digest": "14ea62080c896fe11b32ec2526e39b4900370ef63d8612752700f9731df0a74b",
+    "manifest_path": "/home/igor/work/quarry-hil/build/nucleo-f446re/default/build_manifest.json",
+    "schema_compiler": "quarry-schema-compiler 0.1.266 (115e345)",
+    "schema_compiler_sha256": "f447c9ca1f145dc76ce7eb6ce49a72ec731ed2b3089e81477cc32e741037ba5a",
+    "c_generated_code_api_version": 5,
+    "schema_sha256": "3c4e394cf95a5e5c019ea80650640c462493f35ed6aeda0f63831b4a838b4f46",
+    "generated_files": {
+      "hil/telemetry.generated.c": "15e12dcdea8761bd6ca711d4ad91fed9b6224927fd63d27382dd643cb6faf192",
+      "hil/telemetry.generated.h": "35103acb44050299d48ea288e382d3a92f97baebb791dd5035f8e37b982e1938"
+    },
+    "quarry_runtime_inputs": {
+      "runtime_c/typed_record.c": "580d0d7c6c127a2a5fb2b037889f3568990b144e0a7cdc92114ec364eccc15e3",
+      "include/quarry/runtime_c/binary_record.h": "0f0e11a01db6a494b563db1a6eda42d762ce23090015792a221c08ca8005f875",
+      "include/quarry/runtime_c/binary_record_v2.h": "5d5133fbe69f323b0fc52033209e2b305874c608a0201ba5766294bc966dec42",
+      "include/quarry/runtime_c/generic_brf.h": "b9a3ce46ec3e52cc5fbb50c6fb118720abc489b218e6be0ee00e11bb7abf7ba0",
+      "include/quarry/runtime_c/generic_brf_encoding.h": "0fddf71796356ed71041fd6bd105a43f1c6852ed2abe6f16c7f1ac12fc32a4d6",
+      "include/quarry/runtime_c/typed_record.h": "e3fb8982652119d3e2c79ecaf1ae546207a577ba7a7b6eb838e8d856addb924b"
+    },
+    "harness_sources": {
+      "boards/nucleo-f446re/firmware/startup.c": "ae37c67d06159b3acdc8981926d049a5e0b706913094d276179a3a7f2bb55f3f",
+      "boards/common/libc_shim.c": "d9eb733210b26a14715b31187773a39796a96e35a5d8d25c254e12aa22b43bbf",
+      "boards/nucleo-f446re/firmware/main.c": "0c98451234c381c4c86f80a275d1f41cd68c9b9cfdb59280b190c1c7f8a36e2b",
+      "boards/nucleo-f446re/firmware/uart.h": "37af57a4e81a3b2ac497fa45732b91daaa2acd685d9178d2e739b5b7fff2c6dd",
+      "boards/common/dwt.h": "f5e30523bfcd4be6e901eaced7466561374b52b9f29c5b0991a9e515961be5d8",
+      "boards/common/bench_result.h": "0271a4884812c66b84e9871c8f0494889649e2bdd2d618921da352ec4fedb50d",
+      "boards/common/telemetry_workload.h": "e75aa61f7d22e9fe5466f697b40f1242becd46d90db6f5c45b505464fcb9865f",
+      "boards/nucleo-f446re/firmware/link.ld": "2b72a643e88ff9f1da9ce7b6c5b71b0020f91644c5b1aeec49925d8266fc7590",
+      "boards/common/telemetry.brd": "3c4e394cf95a5e5c019ea80650640c462493f35ed6aeda0f63831b4a838b4f46"
+    },
+    "full_cflags": [
+      "-mcpu=cortex-m4",
+      "-mthumb",
+      "-mfpu=fpv4-sp-d16",
+      "-mfloat-abi=hard",
+      "-ffreestanding",
+      "-fno-builtin",
+      "-nostdlib",
+      "-nostartfiles",
+      "-Wall",
+      "-Wextra",
+      "-Os",
+      "-g",
+      "-std=c11",
+      "-DQUARRY_BENCH_DEVICE_ID=\"nucleo-hil-01\"",
+      "-DQUARRY_BENCH_QUARRY_COMMIT_PREFIX=0x115e3452u",
+      "-DQUARRY_BENCH_BUILD_INPUT_DIGEST=0x14ea6208u",
+      "-I",
+      "/home/igor/work/quarry-hil/build/nucleo-f446re/default/src",
+      "-I",
+      "/home/igor/work/quarry-hil/build/nucleo-f446re/default/generated",
+      "-I",
+      "/home/igor/.cache/visioncb-hil/quarry-ci-checkout/include",
+      "-I",
+      "/home/igor/.cache/quarry-hil/host-build/115e345223d31e3ea94b842c2173f740223fd4c0/generated"
+    ],
+    "footprint": {
+      "elf": {
+        "text": 6884,
+        "data": 0,
+        "bss": 11336
+      },
+      "objects": {
+        "libc_shim": {
+          "text": 40,
+          "data": 0,
+          "bss": 0
+        },
+        "main": {
+          "text": 2692,
+          "data": 0,
+          "bss": 7240
+        },
+        "startup": {
+          "text": 568,
+          "data": 0,
+          "bss": 0
+        },
+        "telemetry.generated": {
+          "text": 0,
+          "data": 0,
+          "bss": 0
+        },
+        "typed_record": {
+          "text": 3572,
+          "data": 0,
+          "bss": 0
+        }
+      }
+    },
+    "compile_warnings": [],
+    "host_layout_gate": {
+      "default": {
+        "presence_layout": 0,
+        "record_sizeof": 96,
+        "encoded_bytes": 88,
+        "fnv1a": "a1bf5120",
+        "payload_hex": "02000010000000010000002e00000058ff01000003e90000018bcfe5687b41c400000e7401010000003e0000000d0000004b000000040000004f000000096e75636c656f2d68696c2d3031deadbeef04ff88000001540fff"
+      },
+      "optimize-size": {
+        "presence_layout": 1,
+        "record_sizeof": 80,
+        "encoded_bytes": 88,
+        "fnv1a": "a1bf5120",
+        "payload_hex": "02000010000000010000002e00000058ff01000003e90000018bcfe5687b41c400000e7401010000003e0000000d0000004b000000040000004f000000096e75636c656f2d68696c2d3031deadbeef04ff88000001540fff"
+      }
+    }
+  },
+  "firmware": {
+    "bin_name": "nucleo_bench-default.bin",
+    "sha256": "3d7e9da47eb2cf5c41f562763c6aae81439f0a316c8804cc571e9ecc96e4ca25",
+    "elf_sha256": "8b52b8e74c6fadbc7b14e75e302d782d98a89d0e028146851b72e91cdc6c1fe3",
+    "bin_bytes": 6888,
+    "text_bytes": 6884,
+    "data_bytes": 0,
+    "bss_bytes": 11336,
+    "compiler": "arm-none-eabi-gcc (15:10.3-2021.07-4) 10.3.1 20210621 (release)",
+    "flags": "-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -ffreestanding -fno-builtin -nostdlib -nostartfiles -Wall -Wextra -Os -g -std=c11",
+    "stack_top": "0x20002c48",
+    "entry_point": "0x80001cb"
+  },
+  "toolchain": {
+    "compiler": "arm-none-eabi-gcc (15:10.3-2021.07-4) 10.3.1 20210621 (release)",
+    "flags": "-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -ffreestanding -fno-builtin -nostdlib -nostartfiles -Wall -Wextra -Os -g -std=c11"
+  },
+  "target": {
+    "board": "NUCLEO-F446RE",
+    "soc": "STMicroelectronics STM32F446RE",
+    "cpu": "Cortex-M4F",
+    "clock_hz": 16000000,
+    "serial_device": "/dev/ttyACM2"
+  },
+  "result_transport": "uart",
+  "benchmark": {
+    "platform": "NUCLEO-F446RE",
+    "cpu": "Cortex-M4F",
+    "workload": "telemetry",
+    "magic": "0x51424e31",
+    "version": 2,
+    "state": 2,
+    "result_code": 1,
+    "counter": 0,
+    "dwt_supported": true,
+    "timing_overhead_cycles": 9,
+    "iterations": 500,
+    "encoded_bytes": 88,
+    "validation_failures": 0,
+    "encode_cycles": {
+      "min": 12596,
+      "max": 12596,
+      "mean": 12596.0,
+      "sum": 6298000
+    },
+    "decode_cycles": {
+      "min": 6827,
+      "max": 6827,
+      "mean": 6827.0,
+      "sum": 3413500
+    },
+    "roundtrip_cycles": {
+      "min": 19415,
+      "max": 19415,
+      "mean": 19415.0,
+      "sum": 9707500
+    },
+    "stack_watermark_bytes": 728,
+    "stack_region_bytes": 4096,
+    "heap_bytes": 0,
+    "record_sizeof": 88,
+    "presence_layout": 0,
+    "quarry_commit_prefix": "115e3452",
+    "build_input_digest": "14ea6208",
+    "encoded_payload_fnv1a": "a1bf5120",
+    "encoded_payload_captured_bytes": 88,
+    "encoded_payload_hex": "02000010000000010000002e00000058ff01000003e90000018bcfe5687b41c400000e7401010000003e0000000d0000004b000000040000004f000000096e75636c656f2d68696c2d3031deadbeef04ff88000001540fff"
+  }
+}
