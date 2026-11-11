@@ -80,7 +80,11 @@ def _run_ok(cmd, what, build_log=None, cwd=None, timeout=600):
         build_log.write("$ %s\n%s%s" % (" ".join(cmd), out, err))
         build_log.flush()
     if rc != 0:
-        raise BuildError("%s failed (exit %d): %s\n%s%s" % (what, rc, " ".join(cmd), out[-4000:], err[-4000:]))
+        # Summaries show only the first line, so lead with any unresolved
+        # symbols; the full command and output follow.
+        missing = sorted(set(re.findall(r"undefined reference to [`'](\w+)'", out + err)))
+        head = "%s failed (exit %d)%s" % (what, rc, ": undefined reference to %s" % ", ".join(missing) if missing else "")
+        raise BuildError("%s\n$ %s\n%s%s" % (head, " ".join(cmd), out[-4000:], err[-4000:]))
     return out, err
 
 
