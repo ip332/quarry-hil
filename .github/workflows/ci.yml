@@ -25,7 +25,7 @@ jobs:
           python3 -m py_compile boards/nucleo-f446re/run_nucleo_hil.py
           python3 -m py_compile infrastructure/core/serial_link.py
           python3 -m py_compile infrastructure/schema/result_schema.py
-          python3 -m py_compile tests/test_schema.py tests/test_result_checks.py
+          python3 -m py_compile tests/test_schema.py tests/test_result_checks.py tests/test_serial_link.py
           python3 -m py_compile infrastructure/build/*.py tools/*.py
       - name: "Check for common import errors"
         run: |
@@ -44,6 +44,8 @@ jobs:
         run: python3 tests/test_schema.py
       - name: "Run result-check / wire-layout tests"
         run: python3 tests/test_result_checks.py
+      - name: "Run serial-link write-stall tests"
+        run: timeout 120 python3 tests/test_serial_link.py
       - name: "Run pytest if available"
         run: |
           python3 -m pip install pytest --quiet 2>/dev/null || true
