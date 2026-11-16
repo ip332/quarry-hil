@@ -14,6 +14,7 @@ already arrived on the wire. A live buffer behind a lock has no such gap.
 import fcntl
 import os
 import re
+import select
 import termios
 import threading
 import time
@@ -21,6 +22,17 @@ import time
 
 class SerialTimeout(Exception):
     pass
+
+
+class SerialWriteStalled(Exception):
+    """The device accepted no data for WRITE_STALL_TIMEOUT_SECONDS. On a
+    USB CDC-ACM port that means every write URB is still pending, i.e. the
+    probe has stopped draining host->target data -- a wedged probe, not a
+    slow board. Runners treat it as a reason to power-cycle the probe."""
+
+
+# Generous: 115200 baud drains a full 4 KiB tty buffer in ~0.4 s.
+WRITE_STALL_TIMEOUT_SECONDS = 5.0
 
 
 class SerialLink:
@@ -86,10 +98,32 @@ class SerialLink:
         os.close(self._fd)
 
     def send_line(self, text):
-        os.write(self._fd, text.encode("ascii") + b"\r\n")
+        self.send_raw(text.encode("ascii") + b"\r\n")
 
-    def send_raw(self, data: bytes):
-        os.write(self._fd, data)
+    def send_raw(self, data: bytes, stall_timeout=WRITE_STALL_TIMEOUT_SECONDS):
+        """Write all of `data`. The fd is non-blocking (for the reader
+        thread), so a full output queue shows up as EAGAIN or a short
+        write; wait for room instead of failing, and raise
+        SerialWriteStalled if the device makes no progress at all for
+        `stall_timeout` seconds."""
+        view = memoryview(data)
+        deadline = time.monotonic() + stall_timeout
+        while view:
+            try:
+                n = os.write(self._fd, view)
+            except BlockingIOError:
+                n = 0
+            if n:
+                view = view[n:]
+                deadline = time.monotonic() + stall_timeout
+                continue
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise SerialWriteStalled(
+                    "%s accepted no data for %.1fs (%d of %d bytes unsent) -- the probe's virtual COM "
+                    "port is not draining host->target writes" % (self.path, stall_timeout, len(view), len(data))
+                )
+            select.select([], [self._fd], [], min(remaining, 0.05))
 
     def snapshot_text(self):
         with self._lock:

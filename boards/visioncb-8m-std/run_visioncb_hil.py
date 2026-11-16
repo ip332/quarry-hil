@@ -32,12 +32,13 @@ import re
 import subprocess
 import sys
 import time
+import traceback
 
 # Import serial_link from infrastructure/core (two levels up from this file)
 _hil_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(_hil_root, "infrastructure", "core"))
 sys.path.insert(0, os.path.join(_hil_root, "infrastructure", "build"))
-from serial_link import SerialLink, SerialTimeout, resolve_segger_jlink_device  # noqa: E402
+from serial_link import SerialLink, SerialTimeout, SerialWriteStalled, resolve_segger_jlink_device  # noqa: E402
 import board_specs  # noqa: E402
 import firmware_build  # noqa: E402
 import power_relay  # noqa: E402
@@ -576,7 +577,16 @@ def run_hardware_sequence(link, log, fw_info, stack_top, pc_entry, args):
 
     Raises RecoveryRequired if the board never becomes responsive at any
     step; the caller decides whether to retry (see main()'s single
-    power-cycle retry below)."""
+    power-cycle retry below). A console write that stalls is a wedged
+    probe, so it is reported the same way: that retry power-cycles the
+    probe's hub port as well as the board."""
+    try:
+        return _run_hardware_sequence(link, log, fw_info, stack_top, pc_entry, args)
+    except SerialWriteStalled as e:
+        raise RecoveryRequired("console write stalled: %s" % e)
+
+
+def _run_hardware_sequence(link, log, fw_info, stack_top, pc_entry, args):
     acquire_console_via_power_cycle(link, log)
     log.log("ACQUIRE_CONSOLE", "at U-Boot prompt with no firmware transferred yet -- resuming Linux first")
     uboot_resume_linux(link, log)
@@ -710,7 +720,7 @@ def main():
         result_doc["result"] = "INFRASTRUCTURE_ERROR"
         result_doc["error"] = "unexpected exception: %r" % (e,)
         result_doc["failure_domain"] = "infrastructure"
-        log.log("INFRASTRUCTURE_ERROR", "unexpected exception: %r" % (e,))
+        log.log("INFRASTRUCTURE_ERROR", "unexpected exception: %r\n%s" % (e, traceback.format_exc()))
         exit_code = 2
     finally:
         if link is not None:
