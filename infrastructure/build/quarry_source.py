@@ -19,6 +19,7 @@ import hashlib
 import os
 import re
 import subprocess
+import time
 
 DEFAULT_CI_CHECKOUT = os.environ.get(
     "QUARRY_HIL_CI_CHECKOUT",
@@ -45,6 +46,30 @@ def _git_ok(repo, *args, timeout=120):
     if rc != 0:
         raise SourceError("git %s failed in %s: %s" % (" ".join(args), repo, err or out))
     return out
+
+
+FETCH_ATTEMPTS = 3
+FETCH_TIMEOUT_SECONDS = 180
+FETCH_RETRY_DELAY_SECONDS = 20
+
+
+def _fetch(checkout, log, attempts=FETCH_ATTEMPTS, timeout=FETCH_TIMEOUT_SECONDS, delay=FETCH_RETRY_DELAY_SECONDS):
+    """Fetch origin, retrying transient network failures (git errors and
+    hangs alike) a bounded number of times."""
+    last = None
+    for attempt in range(1, attempts + 1):
+        log.log("SOURCE", "fetching origin in %s (attempt %d/%d)" % (checkout, attempt, attempts))
+        try:
+            rc, out, err = _git(checkout, "fetch", "origin", "--tags", "--prune", "--force", timeout=timeout)
+        except subprocess.TimeoutExpired:
+            rc, err = None, "timed out after %ds" % timeout
+        if rc == 0:
+            return
+        last = err or out
+        log.log("SOURCE", "fetch attempt %d/%d failed: %s" % (attempt, attempts, last))
+        if attempt < attempts:
+            time.sleep(delay)
+    raise SourceError("git fetch origin failed in %s after %d attempts: %s" % (checkout, attempts, last))
 
 
 def resolve_ref(checkout, ref, log, remote=DEFAULT_QUARRY_REMOTE):
@@ -74,8 +99,13 @@ def resolve_ref(checkout, ref, log, remote=DEFAULT_QUARRY_REMOTE):
             "dedicated CI checkout %s has local modifications; refusing to switch it:\n%s" % (checkout, status)
         )
 
-    log.log("SOURCE", "fetching origin in %s" % checkout)
-    _git_ok(checkout, "fetch", "origin", "--tags", "--prune", "--force", timeout=600)
+    if _SHA_RE.match(ref) and _git(checkout, "cat-file", "-e", ref + "^{commit}")[0] == 0:
+        # Workflows pin every job to the SHA their resolve job chose, so the
+        # commit is usually here already; skipping the fetch removes a
+        # network dependency (an SSL timeout once failed a whole job).
+        log.log("SOURCE", "commit %s already present in %s; not fetching" % (ref, checkout))
+    else:
+        _fetch(checkout, log)
 
     candidates = []
     if _SHA_RE.match(ref):
