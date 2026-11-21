@@ -56,12 +56,11 @@ SEGGER_SERIAL_NUMBER = "000900003460"
 BAUD = 115200
 
 # The J-Link probe's own USB connection -- separate from board power
-# (power_relay.py) -- has been observed to drop off the bus entirely and
-# need a real power cycle (what a human was doing by hand: unplug/replug
-# the hub) to come back. Same physical hub NUCLEO's ST-LINK sits behind,
-# different port -- see infrastructure/core/usb_hub_power.py.
-JLINK_HUB_LOCATION = "3-11.2"
-JLINK_HUB_PORT = "1"
+# (power_relay.py) -- has been observed to drop off the bus entirely, or
+# stay enumerated but wedged, and need a real power cycle of its hub port
+# to come back. The port is found from the probe's serial number at run
+# time, and usb_hub_power refuses ports that carry anything else (above
+# all NUCLEO's ST-LINK) -- see infrastructure/core/usb_hub_power.py.
 JLINK_REENUMERATE_TIMEOUT_SECONDS = 15
 JLINK_REENUMERATE_POLL_SECONDS = 0.5
 
@@ -169,7 +168,9 @@ def discover_device(log, power_cycle_attempts=2):
     log.log("DISCOVER", "resolving SEGGER J-Link %s via /dev/serial/by-id" % SEGGER_SERIAL_NUMBER)
     try:
         device = resolve_segger_jlink_device(SEGGER_SERIAL_NUMBER)
-        log.log("DISCOVER", "resolved device: %s" % device)
+        location = usb_hub_power.remember_port(SEGGER_SERIAL_NUMBER)
+        log.log("DISCOVER", "resolved device: %s (USB hub %s port %s)"
+                % (device, *(location or ("?", "?"))))
         return device
     except RuntimeError as e:
         last_error = e
@@ -188,12 +189,18 @@ def recover_probe(log, reason, power_cycle_attempts=2):
     this even though discovery succeeded."""
     last_error = None
     for attempt in range(1, power_cycle_attempts + 1):
-        log.log(
-            "DISCOVER",
-            "%s -- power-cycle attempt %d/%d: cycling USB hub port %s-%s"
-            % (reason, attempt, power_cycle_attempts, JLINK_HUB_LOCATION, JLINK_HUB_PORT),
-        )
-        usb_hub_power.power_cycle(JLINK_HUB_LOCATION, JLINK_HUB_PORT, log)
+        try:
+            hub, port = usb_hub_power.port_for_serial(SEGGER_SERIAL_NUMBER, log)
+            log.log(
+                "DISCOVER",
+                "%s -- power-cycle attempt %d/%d: cycling USB hub port %s-%s"
+                % (reason, attempt, power_cycle_attempts, hub, port),
+            )
+            usb_hub_power.power_cycle(hub, port, log, expected_serial=SEGGER_SERIAL_NUMBER)
+        except usb_hub_power.UsbPortError as e:
+            # A refusal or a missing location is not retryable by cycling
+            # again: stop and ask for a human, as for an unresponsive board.
+            raise RecoveryRequired("cannot power-cycle the J-Link's USB port (%s): %s" % (reason, e))
         deadline = time.monotonic() + JLINK_REENUMERATE_TIMEOUT_SECONDS
         while time.monotonic() < deadline:
             try:

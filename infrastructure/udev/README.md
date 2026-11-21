@@ -18,16 +18,15 @@ Grants the `plugdev` group control access to the VIA Labs VL812 USB2.0 hub (`idV
 
 Two independent things happen to sit behind different ports on this same physical hub, and both rely on this one rule:
 
-- **NUCLEO-F446RE's ST-LINK/V2.1** (port 3) — its own power *is* the board's power (no separate power rail). **Do not power-cycle this port**: doing so leaves the STM32 unreachable over SWD until the USB cable is physically replugged (reproduced 2026-09-29), so the NUCLEO runner never touches it.
-- **VisionCB-8M-STD's SEGGER J-Link probe** (port 1) — a separate USB device from the board itself (the board's power comes from a relay instead, see `power_relay.py`), which has been observed to drop off the USB bus entirely between runs. `run_visioncb_hil.py`'s `recover_probe()` power-cycles this port as recovery if the probe isn't found, or if the board stays silent (a wedged probe keeps its serial port but delivers no bytes).
+- **NUCLEO-F446RE's ST-LINK/V2.1** — its own power *is* the board's power (no separate power rail). **Its port must never be power-cycled**: doing so leaves the STM32 unreachable over SWD until the USB cable is physically replugged (reproduced 2026-09-29). The NUCLEO runner never touches port power, and `usb_hub_power.py` refuses any port that carries the ST-LINK (`PROTECTED_SERIALS`), wherever it is plugged in.
+- **VisionCB-8M-STD's SEGGER J-Link probe** — a separate USB device from the board itself (the board's power comes from a relay instead, see `power_relay.py`), which has been observed to drop off the USB bus, or stay enumerated but stop moving data. `run_visioncb_hil.py`'s `recover_probe()` power-cycles the probe's port in those cases.
 
-Both uses go through the same `infrastructure/core/usb_hub_power.py` module, parameterized by hub location + port rather than hardcoded to one board.
+Ports are not hardcoded. `usb_hub_power.port_for_serial()` finds a device's hub location and port from its USB serial number in sysfs, and remembers the last location in `~/.cache/quarry-hil/usb-ports/`, so a probe that has dropped off the bus can still be found. Before any power cut, `check_port_safe()` asks `uhubctl` what is on that port of every hub it would switch (a USB3 hub's USB2 and USB3 halves share each connector). It refuses unless the port is empty or holds only the expected device, and unless the hub switches ports individually (`ppps`). Moving cables between host ports therefore needs no code change, but the J-Link must stay on a hub that this rule grants access to.
 
-Verify it took effect:
+Verify it took effect (the hub's current location is the part of the J-Link's sysfs name before the last `.`, e.g. `3-7` for `3-7.2`):
 ```
-uhubctl -l 3-11.2   # should list the hub's ports with no sudo needed
+uhubctl -l 3-7   # should list the hub's ports with no sudo needed
 ```
-(`3-11.2` is this specific host's hub location. A different host would need `uhubctl` run once, with the relevant device connected, to find its own hub location — `lsusb -t` plus `udevadm info --query=path --name=/dev/bus/usb/<bus>/<dev>` shows the sysfs devpath, whose last `bus-port[.port...]` segment is uhubctl's `-l` location.)
 
 ### `53-udisks-ignore-nucleo.rules` (NUCLEO-F446RE)
 
